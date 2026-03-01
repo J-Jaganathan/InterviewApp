@@ -1,0 +1,3 @@
+pages:{
+    signIn : "/auth/login";
+}

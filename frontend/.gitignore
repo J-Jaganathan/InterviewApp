@@ -1,0 +1,67 @@
+# ========================================
+# Node
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local env files
+.env
+.env.local
+.env*.local
+
+# ========================================
+# Next.js
+# ========================================
+.next/
+out/
+dist/
+.next/static/chunks/**
+.next/cache/**
+
+# Build output
+build/
+*.tsbuildinfo
+
+# ========================================
+# OS and Editor Files
+# ========================================
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ========================================
+# Logs
+# ========================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ========================================
+# Optional: Ignore Turbo / Bun
+# ========================================
+.turbo/
+bun.lockb
+
+# ========================================
+# Ignore Prisma generated folder
+# (Enabled ONLY if you choose to use Prisma later)
+# ========================================
+# prisma/migrations/
+
+# ========================================
+# Ignore uploaded files (if you store uploads locally)
+# ========================================
+public/uploads/
+uploads/
