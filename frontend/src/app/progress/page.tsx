@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getProgress, type ProgressData } from '@/api'
 
 function ProgressRing({ percentage }: { percentage: number }) {
   const radius = 50
@@ -34,23 +35,72 @@ function ProgressRing({ percentage }: { percentage: number }) {
 }
 
 export default function ProgressPage() {
-  // Replace these with your real values or props/context later
-  const [sessionsCompleted] = useState(12)
-  const [totalSessions] = useState(20)
-  const [avgScore] = useState(86)
-  const [currentStreak] = useState(4)
-  const [cats] = useState([
-    { label: 'HR', pct: 82 },
-    { label: 'Technical', pct: 73 },
-    { label: 'Behavioral', pct: 90 },
-    { label: 'System Design', pct: 65 },
-    { label: 'Aptitude', pct: 58 },
-    { label: 'DSA', pct: 76 },
-  ])
-  const overallPct = useMemo(
-    () => Math.round((sessionsCompleted / totalSessions) * 100),
-    [sessionsCompleted, totalSessions]
-  )
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [progressData, setProgressData] = useState<ProgressData | null>(null)
+
+  // Fetch progress data on mount
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await getProgress()
+        setProgressData(data)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch progress'
+        setError(message)
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProgress()
+  }, [])
+
+  // Use defaults while loading
+  const sessionsCompleted = progressData?.sessionsCompleted ?? 12
+  const totalSessions = progressData?.totalSessions ?? 20
+  const avgScore = progressData?.avgScore ?? 86
+  const currentStreak = progressData?.currentStreak ?? 4
+  const overallPct = progressData?.overall ?? Math.round((sessionsCompleted / totalSessions) * 100)
+  const cats = progressData?.categoryBreakdown ?? [
+    { label: 'HR', percentage: 82 },
+    { label: 'Technical', percentage: 73 },
+    { label: 'Behavioral', percentage: 90 },
+    { label: 'System Design', percentage: 65 },
+    { label: 'Aptitude', percentage: 58 },
+    { label: 'DSA', percentage: 76 },
+  ]
+  const recommendations = progressData?.recommendations ?? [
+    'Practice DSA: Arrays & Hashing',
+    'System Design: Caching strategies',
+    'Behavioral: STAR story bank',
+    'HR: Strengths/Weaknesses drill',
+    'Technical: Big-O quick test',
+  ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading progress...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-8">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          Error: {error}
+        </div>
+      </div>
+    )
+  }
 
 
 
@@ -130,10 +180,10 @@ export default function ProgressPage() {
             <div key={c.label} className="p-4 rounded-xl bg-blue-50">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-gray-700">{c.label}</span>
-                <span className="font-bold text-blue-700">{c.pct}%</span>
+                <span className="font-bold text-blue-700">{c.percentage}%</span>
               </div>
               <div className="mt-2 h-2 bg-white rounded-full overflow-hidden">
-                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${c.pct}%` }} />
+                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${c.percentage}%` }} />
               </div>
             </div>
           ))}
@@ -144,13 +194,7 @@ export default function ProgressPage() {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-50 mt-6">
         <h2 className="font-bold text-gray-900 text-lg mb-3">Recommended Next Steps</h2>
         <div className="flex flex-wrap gap-2">
-          {[
-            'Practice DSA: Arrays & Hashing',
-            'System Design: Caching strategies',
-            'Behavioral: STAR story bank',
-            'HR: Strengths/Weaknesses drill',
-            'Technical: Big-O quick test',
-          ].map((s) => (
+          {recommendations.map((s) => (
             <span
               key={s}
               className="px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-sm border border-blue-100"

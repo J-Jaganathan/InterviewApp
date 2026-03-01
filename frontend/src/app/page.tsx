@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { clearAuthCookie } from "@/lib/auth";
+import { getDashboard, type DashboardData, logout } from "@/api";
 import { Home, CheckCircle, FileText, BookOpen, Mic } from "lucide-react";
 
 /* ---------------------- Inline SVG Icon Components ---------------------- */
@@ -152,41 +153,46 @@ export default function Dashboard() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Example state (your actual values)
-  const [progress] = useState(75);
-  const [sessionsCompleted] = useState(12);
-  const [totalSessions] = useState(20);
-  const [avgScore] = useState(86);
+  // Dashboard data state
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
 
-  useEffect(() => setIsLoaded(true), []);
+  // Fetch dashboard data on mount
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getDashboard();
+        setDashboardData(data);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load dashboard";
+        setError(message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+        setIsLoaded(true);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
+  // Use default values if data hasn't loaded yet
+  const progress = dashboardData?.progress ?? 75;
+  const sessionsCompleted = dashboardData?.sessionsCompleted ?? 12;
+  const totalSessions = dashboardData?.totalSessions ?? 20;
+  const avgScore = dashboardData?.avgScore ?? 86;
+  const user = dashboardData?.user ?? { name: "User", title: "Professional" };
+  const upcomingInterview = dashboardData?.upcomingInterview ?? { company: "Google", position: "Software Engineer", daysUntil: 5 };
+  const notifications = dashboardData?.notifications ?? 3;
 
   const goToInterview = () => router.push("/interview");
-  
-  const logout = () => {
-    clearAuthCookie();
-    router.push("/login");
 
-
-    useEffect(() => {
-    const isLoggedIn = localStorage.getItem('isLoggedIn')
- 
-    if (!isLoggedIn) {
-      router.push('/login')
-    }
-  }, [router])
- 
   const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn')
-    router.push('/login')
-  }
- 
-  return (
-    <div>
-      <h2>Welcome to Dashboard 🎉</h2>
-      <button onClick={handleLogout}>Logout</button>
-    </div>
-  )
+    logout();
   };
 
   const navItems = [
@@ -230,9 +236,9 @@ export default function Dashboard() {
         <div className="flex flex-col gap-2 mb-4 w-full px-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-blue-300 border-2 border-white" />
-            {isMenuOpen && <span className="text-white text-sm font-medium">User</span>}
+            {isMenuOpen && <span className="text-white text-sm font-medium">{user.name.split(' ')[0] || 'User'}</span>}
           </div>
-          <button onClick={logout} className="text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg py-2">
+          <button onClick={handleLogout} className="text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg py-2">
             Logout
           </button>
         </div>
@@ -259,19 +265,21 @@ export default function Dashboard() {
               <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-gray-500 hover:bg-blue-50 transition-colors">
                 <BellIcon />
               </div>
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">3</span>
-              </div>
+              {notifications > 0 && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">{notifications}</span>
+                </div>
+              )}
             </div>
 
             {/* User */}
             <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl px-3 py-2 transition-colors">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow">
-                JD
+                {user.name.split(' ').map(n => n[0]).join('').substring(0, 2) || 'U'}
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-800">John Doe</p>
-                <p className="text-xs text-gray-400">Software Engineer</p>
+                <p className="text-sm font-semibold text-gray-800">{user.name}</p>
+                <p className="text-xs text-gray-400">{user.title || 'Professional'}</p>
               </div>
               <ChevronDownIcon />
             </div>
@@ -280,161 +288,180 @@ export default function Dashboard() {
 
         {/* Dashboard Body */}
         <main className="flex-1 overflow-y-auto p-8">
-          {/* Welcome */}
-          <div className={`mb-8 transition-all duration-500 ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-            <h1 className="text-3xl font-extrabold text-gray-900">Welcome, John! 👋</h1>
-            <p className="text-gray-500 mt-1 text-base">Let&apos;s prepare for your next interview</p>
-          </div>
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              Error: {error} - Please refresh or contact support.
+            </div>
+          )}
 
-          {/* Cards Grid */}
-          <div className="grid grid-cols-3 gap-6">
-            {/* Your Progress */}
-            <div
-              className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-100 ${
-                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-              }`}
-            >
-              <h3 className="font-bold text-gray-800 text-lg mb-5">Your Progress</h3>
-              <div className="flex flex-col items-center gap-2">
-                <ProgressRing percentage={progress} />
-                <p className="text-gray-400 text-sm font-medium mt-2">Completed</p>
-                <div className="w-full mt-4 grid grid-cols-2 gap-3">
-                  <div className="bg-blue-50 rounded-xl p-3 text-center">
-                    <p className="text-xl font-bold text-blue-700">{sessionsCompleted}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Sessions Done</p>
-                  </div>
-                  <div className="bg-blue-50 rounded-xl p-3 text-center">
-                    <p className="text-xl font-bold text-blue-700">{avgScore}%</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Avg Score</p>
-                  </div>
-                </div>
+          {loading && (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">Loading dashboard...</p>
               </div>
             </div>
+          )}
 
-            {/* Upcoming Interview */}
-            <div
-              className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-200 ${
-                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-              }`}
-            >
-              <h3 className="font-bold text-gray-800 text-lg mb-5">Upcoming Interview</h3>
-              <div className="flex flex-col items-center gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center">
-                    <CalendarIcon />
-                  </div>
-                  <div>
-                    <p className="text-xl font-extrabold text-gray-900">Google</p>
-                    <p className="text-sm text-gray-400 mt-0.5">• Software Engineer</p>
-                  </div>
-                </div>
+          {!loading && dashboardData && (
+            <>
+              {/* Welcome */}
+              <div className={`mb-8 transition-all duration-500 ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+                <h1 className="text-3xl font-extrabold text-gray-900">Welcome, {user.name.split(' ')[0]}! 👋</h1>
+                <p className="text-gray-500 mt-1 text-base">Let&apos;s prepare for your next interview</p>
+              </div>
 
-                <div className="w-full bg-blue-50 rounded-xl py-4 px-6 text-center">
-                  <p className="text-lg font-bold text-gray-800">In 5 Days</p>
-                </div>
-
-                <button
-                  onClick={goToInterview}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl py-3 transition-colors text-sm"
+              {/* Cards Grid */}
+              <div className="grid grid-cols-3 gap-6">
+                {/* Your Progress */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-100 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
                 >
-                  Start Practice Session
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Start */}
-            <div
-              className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-300 ${
-                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-              }`}
-            >
-              <h3 className="font-bold text-gray-800 text-lg mb-2">Quick Start</h3>
-              <div className="flex justify-center my-3 opacity-80">
-                <svg width="100" height="70" viewBox="0 0 100 70" fill="none">
-                  <rect x="20" y="30" width="60" height="35" rx="4" fill="#dbeafe" />
-                  <rect x="50" y="38" width="22" height="3" rx="1.5" fill="#bfdbfe" />
-                  <rect x="50" y="44" width="16" height="3" rx="1.5" fill="#bfdbfe" />
-                  <rect x="50" y="50" width="20" height="3" rx="1.5" fill="#bfdbfe" />
-                  <circle cx="35" cy="46" r="10" fill="#1a3bcc" />
-                  <circle cx="35" cy="42" r="4" fill="#bfdbfe" />
-                  <rect x="28" y="47" width="14" height="8" rx="8" fill="#bfdbfe" />
-                </svg>
-              </div>
-              <p className="text-xs text-gray-400 mb-4 text-center">Jump into a practice session</p>
-              <div className="flex flex-col gap-2">
-                <QuickStartItem icon={<LightbulbIcon />} label="Aptitude" />
-                <QuickStartItem icon={<DatabaseIcon />} label="DSA" />
-                <QuickStartItem icon={<NetworkIcon />} label="System Design" />
-              </div>
-            </div>
-
-            {/* Mock Interview Prep - full width bottom */}
-            <div
-              className={`col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-400 ${
-                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-              }`}
-            >
-
-              <h3 className="font-bold text-gray-800 text-lg mb-4">Mock Interview Prep</h3>
-              <div className="flex items-center gap-8">
-                {/* Illustration */}
-                <div className="flex-shrink-0">
-                  <InterviewIllustration />
-                </div>
-
-                {/* Stats */}
-                <div className="flex-1 flex items-center gap-8">
-                  <div>
-                    <p className="text-3xl font-extrabold text-gray-900">
-                      {sessionsCompleted}/{totalSessions}
-                    </p>
-                    <p className="text-sm text-gray-400 mt-1">Sessions completed</p>
-                  </div>
-                  <div className="w-px h-12 bg-gray-100" />
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Average Score
-                    </p>
-                    <p className="text-3xl font-extrabold text-blue-600">{avgScore}%</p>
-                  </div>
-                  <div className="w-px h-12 bg-gray-100" />
-                  <div className="flex-1">
-                    <div className="flex justify-between text-xs text-gray-400 mb-2">
-                      <span>Progress to goal</span>
-                      <span>
-                        {sessionsCompleted}/{totalSessions}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-blue-50 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-600 rounded-full transition-all duration-1000"
-                        style={{ width: `${(sessionsCompleted / totalSessions) * 100}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      {["HR", "Technical", "Behavioral", "System Design"].map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-sm bg-blue-50 text-blue-600 px-4 py-2 rounded-lg flex items-center justify-center"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                  <h3 className="font-bold text-gray-800 text-lg mb-5">Your Progress</h3>
+                  <div className="flex flex-col items-center gap-2">
+                    <ProgressRing percentage={progress} />
+                    <p className="text-gray-400 text-sm font-medium mt-2">Completed</p>
+                    <div className="w-full mt-4 grid grid-cols-2 gap-3">
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <p className="text-xl font-bold text-blue-700">{sessionsCompleted}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Sessions Done</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <p className="text-xl font-bold text-blue-700">{avgScore}%</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Avg Score</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Continue button */}
-                <button
-                  onClick={goToInterview}
-                  className="flex-shrink-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-6 py-3 transition-colors shadow-md shadow-blue-200"
+                {/* Upcoming Interview */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-200 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
                 >
-                  Continue
-                  <ChevronDownIcon />
-                </button>
+                  <h3 className="font-bold text-gray-800 text-lg mb-5">Upcoming Interview</h3>
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center">
+                        <CalendarIcon />
+                      </div>
+                      <div>
+                        <p className="text-xl font-extrabold text-gray-900">{upcomingInterview.company}</p>
+                        <p className="text-sm text-gray-400 mt-0.5">• {upcomingInterview.position}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-blue-50 rounded-xl py-4 px-6 text-center">
+                      <p className="text-lg font-bold text-gray-800">In {upcomingInterview.daysUntil} Days</p>
+                    </div>
+
+                    <button
+                      onClick={goToInterview}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl py-3 transition-colors text-sm"
+                    >
+                      Start Practice Session
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Start */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-300 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+                  <h3 className="font-bold text-gray-800 text-lg mb-2">Quick Start</h3>
+                  <div className="flex justify-center my-3 opacity-80">
+                    <svg width="100" height="70" viewBox="0 0 100 70" fill="none">
+                      <rect x="20" y="30" width="60" height="35" rx="4" fill="#dbeafe" />
+                      <rect x="50" y="38" width="22" height="3" rx="1.5" fill="#bfdbfe" />
+                      <rect x="50" y="44" width="16" height="3" rx="1.5" fill="#bfdbfe" />
+                      <rect x="50" y="50" width="20" height="3" rx="1.5" fill="#bfdbfe" />
+                      <circle cx="35" cy="46" r="10" fill="#1a3bcc" />
+                      <circle cx="35" cy="42" r="4" fill="#bfdbfe" />
+                      <rect x="28" y="47" width="14" height="8" rx="8" fill="#bfdbfe" />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 text-center">Jump into a practice session</p>
+                  <div className="flex flex-col gap-2">
+                    <QuickStartItem icon={<LightbulbIcon />} label="Aptitude" />
+                    <QuickStartItem icon={<DatabaseIcon />} label="DSA" />
+                    <QuickStartItem icon={<NetworkIcon />} label="System Design" />
+                  </div>
+                </div>
+
+                {/* Mock Interview Prep - full width bottom */}
+                <div
+                  className={`col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-400 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+
+                  <h3 className="font-bold text-gray-800 text-lg mb-4">Mock Interview Prep</h3>
+                  <div className="flex items-center gap-8">
+                    {/* Illustration */}
+                    <div className="flex-shrink-0">
+                      <InterviewIllustration />
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex-1 flex items-center gap-8">
+                      <div>
+                        <p className="text-3xl font-extrabold text-gray-900">
+                          {sessionsCompleted}/{totalSessions}
+                        </p>
+                        <p className="text-sm text-gray-400 mt-1">Sessions completed</p>
+                      </div>
+                      <div className="w-px h-12 bg-gray-100" />
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                          Average Score
+                        </p>
+                        <p className="text-3xl font-extrabold text-blue-600">{avgScore}%</p>
+                      </div>
+                      <div className="w-px h-12 bg-gray-100" />
+                      <div className="flex-1">
+                        <div className="flex justify-between text-xs text-gray-400 mb-2">
+                          <span>Progress to goal</span>
+                          <span>
+                            {sessionsCompleted}/{totalSessions}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-blue-50 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-600 rounded-full transition-all duration-1000"
+                            style={{ width: `${(sessionsCompleted / totalSessions) * 100}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          {["HR", "Technical", "Behavioral", "System Design"].map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-sm bg-blue-50 text-blue-600 px-4 py-2 rounded-lg flex items-center justify-center"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Continue button */}
+                    <button
+                      onClick={goToInterview}
+                      className="flex-shrink-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-6 py-3 transition-colors shadow-md shadow-blue-200"
+                    >
+                      Continue
+                      <ChevronDownIcon />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </main>
       </div>
     </div>

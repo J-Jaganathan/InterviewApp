@@ -3,22 +3,40 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { login } from '@/api'
 
 export default function Login() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleLogin = () => {
-    const storedUser = localStorage.getItem('user')
-    if (!storedUser) return alert('Signup first.')
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!email || !password) {
+      setError('Please enter both email and password')
+      return
+    }
 
-    const user = JSON.parse(storedUser)
-    if (user.email === email && user.password === password) {
-      localStorage.setItem('isLoggedIn', 'true')
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await login(email, password)
+      
+      // Store token in localStorage
+      localStorage.setItem('token', response.token)
+      
+      // Redirect to dashboard
       router.push('/')
-    } else {
-      alert('Invalid credentials')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed'
+      setError(message)
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -36,27 +54,40 @@ export default function Login() {
         </div>
 
         <div className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+          
           <input
             type="email"
             placeholder="Email"
-            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-white"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
           />
 
           <input
             type="password"
             placeholder="Password"
-            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-white"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
           />
 
           <button
             onClick={handleLogin}
-            className="w-full rounded-md bg-indigo-600 py-3 text-sm font-medium hover:bg-indigo-500 transition-colors"
+            disabled={loading}
+            className={`w-full rounded-md py-3 text-sm font-medium transition-colors ${
+              loading
+                ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+            }`}
           >
-            Sign in
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </div>
 
