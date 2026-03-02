@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// frontend/src/middleware.ts
 export function middleware(req: NextRequest) {
   const token = req.cookies.get("auth_token")?.value;
   const { pathname } = req.nextUrl;
-
   const isDashboard = pathname === "/";
   const isAuthPage = pathname === "/auth/login" || pathname === "/auth/signup";
 
-  // Not logged in → force to /login
+  // TEMP: don't hard-block when cookie missing; let client-side token work
   if (!token && isDashboard) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/auth/login";
-    // optionally remember where they came from:
-    // url.searchParams.set("from", pathname);
-    return NextResponse.redirect(url);
+    return NextResponse.next(); // allow; client will fetch and redirect if truly not authed
   }
 
-  // Already logged in → block /login and /signup
   if (token && isAuthPage) {
     const url = req.nextUrl.clone();
     url.pathname = "/";

@@ -7,15 +7,15 @@ import { signup } from '@/api'
 
 export default function Signup() {
   const router = useRouter()
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!name || !email || !password) {
       setError('Please fill all fields')
       return
@@ -30,11 +30,11 @@ export default function Signup() {
       setLoading(true)
       setError(null)
       
-      const response = await signup(email, password, name)
+      const response = await signup(name, email, password)
       
       // Store token if provided
-      if (response.token) {
-        localStorage.setItem('token', response.token)
+      if (response.token || response.user) {
+        localStorage.setItem('auth_token', response.token || '')
         // Redirect to dashboard
         router.push('/')
       } else {

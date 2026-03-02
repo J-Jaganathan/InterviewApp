@@ -1,0 +1,1974 @@
+﻿===== RUN START: 2026-03-02 14:04:15 =====
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\api.ts | Size: 0.01 MB | Modified: 2026-03-02 13:47:07 =====
+/**
+ * Canonical API Client â€“ Next.js â†” Flask
+ * - Merged superset of previous src/api.ts and src/lib/api.ts
+ * - Fixes token key/cookie mismatch, base URL fallback, and FormData handling
+ * - Keeps all endpoints used anywhere in your frontend
+ */
+
+import { setAuthCookie, clearAuthCookie } from '@/lib/auth'; // middleware gate needs this
+
+/* ======================== BASE CONFIG ======================== */
+
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:5000';
+
+const TOKEN_KEY = 'auth_token';
+
+/* ======================== TOKEN HELPERS ======================== */
+
+// frontend/src/api.ts
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('auth_token'); // was 'token'
+}
+
+export function isAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!localStorage.getItem('auth_token'); // was 'token'
+}
+
+export function logout(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('auth_token'); // was 'token'
+  window.location.href = '/auth/login';
+}
+function setToken(token: string) {
+  if (typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, token);
+}
+function removeToken() {
+  if (typeof window !== 'undefined') localStorage.removeItem(TOKEN_KEY);
+}
+
+/* Build fetch options with Authorization header.
+   NOTE: We add 'Content-Type: application/json' only when body is not FormData. */
+function getFetchOptions(overrides: RequestInit = {}): RequestInit {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+
+  const isFormData =
+    typeof FormData !== 'undefined' && overrides.body instanceof FormData;
+  if (!isFormData) headers['Content-Type'] = 'application/json';
+
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  return {
+    // If you later switch to HttpOnly cookie from Flask, enable:
+    // credentials: 'include',
+    ...overrides,
+    headers: {
+      ...headers,
+      ...(overrides.headers ?? {}),
+    },
+  };
+}
+
+/* Unified response handler */
+async function handleResponse(response: Response) {
+  const tryJson = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401) {
+      removeToken();
+      clearAuthCookie();
+      if (typeof window !== 'undefined') window.location.href = '/auth/login';
+    }
+    const msg = (tryJson && (tryJson.message || tryJson.error)) ?? response.statusText;
+    throw new Error(msg || `API Error: ${response.status}`);
+  }
+  return tryJson;
+}
+
+/* ======================== AUTH ======================== */
+
+export interface LoginResponse {
+  token: string;
+  user?: { id: string; email: string; name: string };
+}
+
+/** Login: (email,password). For compatibility, a shim accepts {username,password} as well. */
+export async function login(
+  emailOrUsername: string,
+  password: string
+): Promise<LoginResponse> {
+  // Accept both email/password and username/password from old callers.
+  const body =
+    emailOrUsername.includes('@')
+      ? { email: emailOrUsername, password }
+      : { username: emailOrUsername, password };
+
+  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    ...getFetchOptions({ body: JSON.stringify(body) }),
+  });
+  const data = await handleResponse(res);
+  if (data.token) {
+    setToken(data.token);
+    setAuthCookie(data.token); // middleware looks for 'auth_token'
+  }
+  return data;
+}
+
+/** Signup: (name,email,password). */
+export async function signup(name: string, email: string, password: string) {
+  const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    ...getFetchOptions({ body: JSON.stringify({ name, email, password }) }),
+  });
+  const data = await handleResponse(res);
+  if (data.token) {
+    setToken(data.token);
+    setAuthCookie(data.token);
+  }
+  return data;
+}
+
+/** Optional: get current user if your Flask exposes /api/auth/me */
+export async function getCurrentUser() {
+  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/** Optional: server-side logout if Flask exposes /api/auth/logout */
+export async function serverLogout() {
+  const res = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: 'POST',
+    ...getFetchOptions(),
+  });
+  // local cleanup regardless of server response
+  logout();
+  return handleResponse(res);
+}
+
+/* ======================== DASHBOARD ======================== */
+
+export interface DashboardData {
+  user: { id: string; name: string; email: string; title?: string };
+  progress: number;
+  sessionsCompleted: number;
+  totalSessions: number;
+  avgScore: number;
+  upcomingInterview?: { company: string; position: string; daysUntil: number };
+  notifications?: number;
+}
+
+export async function getDashboard(): Promise<DashboardData> {
+  const res = await fetch(`${API_BASE_URL}/api/dashboard`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/* ======================== QUESTIONS ======================== */
+
+export interface Question {
+  id: string;
+  text: string;
+  category?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+}
+
+export async function getQuestions(params?: {
+  category?: string;
+  difficulty?: string;
+  limit?: number;
+}): Promise<Question[]> {
+  const qs = new URLSearchParams();
+  if (params?.category) qs.append('category', params.category);
+  if (params?.difficulty) qs.append('difficulty', params.difficulty);
+  if (params?.limit) qs.append('limit', String(params.limit));
+  const url = `${API_BASE_URL}/api/questions${qs.toString() ? `?${qs}` : ''}`;
+  const res = await fetch(url, { method: 'GET', ...getFetchOptions() });
+  return handleResponse(res);
+}
+
+export async function getRandomQuestions(count = 10): Promise<Question[]> {
+  const res = await fetch(`${API_BASE_URL}/api/questions/random?count=${count}`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/** From src/lib/api.ts â€“ get single question by id */
+export async function getQuestion(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/questions/${id}`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/** From src/lib/api.ts â€“ create/update/delete question */
+export async function createQuestion(
+  title: string,
+  description?: string,
+  difficulty?: string,
+  category?: string
+) {
+  const res = await fetch(`${API_BASE_URL}/api/questions`, {
+    method: 'POST',
+    ...getFetchOptions({ body: JSON.stringify({ title, description, difficulty, category }) }),
+  });
+  return handleResponse(res);
+}
+export async function updateQuestion(id: number, data: any) {
+  const res = await fetch(`${API_BASE_URL}/api/questions/${id}`, {
+    method: 'PUT',
+    ...getFetchOptions({ body: JSON.stringify(data) }),
+  });
+  return handleResponse(res);
+}
+export async function deleteQuestion(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/questions/${id}`, {
+    method: 'DELETE',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/* ======================== PROGRESS ======================== */
+
+export interface ProgressData {
+  overall: number;
+  sessionsCompleted: number;
+  totalSessions: number;
+  avgScore: number;
+  currentStreak: number;
+  categoryBreakdown: Array<{ label: string; percentage: number }>;
+  recommendations?: string[];
+}
+
+export async function getProgress(): Promise<ProgressData> {
+  const res = await fetch(`${API_BASE_URL}/api/progress`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/* ======================== SESSIONS ======================== */
+
+export interface Session {
+  id: string;
+  startedAt: string;
+  completedAt?: string;
+  questionsCount: number;
+  avgScore?: number;
+  status: 'in_progress' | 'completed';
+}
+
+export async function getMySessions(): Promise<Session[]> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+export async function startSession(params?: {
+  role?: string;
+  company?: string;
+  questionsCount?: number;
+}): Promise<Session> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions`, {
+    method: 'POST',
+    ...getFetchOptions({ body: JSON.stringify(params ?? {}) }),
+  });
+  return handleResponse(res);
+}
+
+/** Upload recording (FormData) â€“ keep Authorization but no JSON headers */
+export async function saveSessionRecording(
+  sessionId: string,
+  questionId: string,
+  blob: Blob,
+  fileName: string
+): Promise<{ id: string; fileName: string }> {
+  const fd = new FormData();
+  fd.append('file', blob, fileName);
+  fd.append('sessionId', sessionId);
+  fd.append('questionId', questionId);
+
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/recordings`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: fd,
+  });
+  return handleResponse(res);
+}
+
+export async function completeSession(sessionId: string): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/complete`, {
+    method: 'POST',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/* ======================== RESOURCES ======================== */
+
+export interface Resource {
+  id: string;
+  title: string;
+  desc: string;
+  tags: string[];
+  link?: string;
+  category?: string;
+}
+
+export async function getResources(category?: string): Promise<Resource[]> {
+  const url = category
+    ? `${API_BASE_URL}/api/resources?category=${category}`
+    : `${API_BASE_URL}/api/resources`;
+  const res = await fetch(url, { method: 'GET', ...getFetchOptions() });
+  return handleResponse(res);
+}
+
+/* ======================== STUDY PLAN ======================== */
+
+export interface StudyPlanDay {
+  day: string;
+  items: string[];
+  done?: boolean;
+}
+export interface StudyPlan {
+  plan: StudyPlanDay[];
+  generatedAt: string;
+}
+export async function getStudyPlan(): Promise<StudyPlan> {
+  const res = await fetch(`${API_BASE_URL}/api/study-plan`, {
+    method: 'GET',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+export async function updateStudyPlanDay(
+  dayIndex: number,
+  done: boolean
+): Promise<StudyPlan> {
+  const res = await fetch(`${API_BASE_URL}/api/study-plan/day/${dayIndex}`, {
+    method: 'PATCH',
+    ...getFetchOptions({ body: JSON.stringify({ done }) }),
+  });
+  return handleResponse(res);
+}
+export async function generateNextWeek(): Promise<StudyPlan> {
+  const res = await fetch(`${API_BASE_URL}/api/study-plan/generate`, {
+    method: 'POST',
+    ...getFetchOptions(),
+  });
+  return handleResponse(res);
+}
+
+/* ======================== CANDIDATES (from src/lib/api.ts) ======================== */
+
+export interface Candidate {
+  id?: number;
+  name: string;
+  email: string;
+  phone?: string;
+  status?: string;
+}
+
+export async function getCandidates() {
+  const res = await fetch(`${API_BASE_URL}/api/candidates`, getFetchOptions({ method: 'GET' }));
+  return handleResponse(res);
+}
+export async function getCandidate(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/candidates/${id}`, getFetchOptions({ method: 'GET' }));
+  return handleResponse(res);
+}
+export async function createCandidate(name: string, email: string, phone?: string, status?: string) {
+  const res = await fetch(`${API_BASE_URL}/api/candidates`,
+    getFetchOptions({ method: 'POST', body: JSON.stringify({ name, email, phone, status }) })
+  );
+  return handleResponse(res);
+}
+export async function updateCandidate(id: number, data: Partial<Candidate>) {
+  const res = await fetch(`${API_BASE_URL}/api/candidates/${id}`,
+    getFetchOptions({ method: 'PUT', body: JSON.stringify(data) })
+  );
+  return handleResponse(res);
+}
+export async function deleteCandidate(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/candidates/${id}`, getFetchOptions({ method: 'DELETE' }));
+  return handleResponse(res);
+}
+export async function searchCandidates(query: string) {
+  const res = await fetch(`${API_BASE_URL}/api/candidates/search?q=${encodeURIComponent(query)}`,
+    getFetchOptions({ method: 'GET' })
+  );
+  return handleResponse(res);
+}
+
+/* ======================== INTERVIEWS (from src/lib/api.ts) ======================== */
+
+export interface Interview {
+  id?: number;
+  candidate_id: number;
+  question_id: number;
+  score?: number;
+  feedback?: string;
+}
+
+export async function getInterviews(candidateId?: number) {
+  let url = `${API_BASE_URL}/api/interviews`;
+  if (candidateId) url += `?candidate_id=${candidateId}`;
+  const res = await fetch(url, getFetchOptions({ method: 'GET' }));
+  return handleResponse(res);
+}
+export async function getInterview(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/interviews/${id}`, getFetchOptions({ method: 'GET' }));
+  return handleResponse(res);
+}
+export async function getCandidateInterviews(candidateId: number) {
+  const res = await fetch(`${API_BASE_URL}/api/interviews/candidate/${candidateId}`,
+    getFetchOptions({ method: 'GET' })
+  );
+  return handleResponse(res);
+}
+export async function createInterview(candidateId: number, questionId: number, score?: number, feedback?: string) {
+  const res = await fetch(`${API_BASE_URL}/api/interviews`,
+    getFetchOptions({
+      method: 'POST',
+      body: JSON.stringify({ candidate_id: candidateId, question_id: questionId, score, feedback }),
+    })
+  );
+  return handleResponse(res);
+}
+export async function updateInterview(id: number, data: Partial<Interview>) {
+  const res = await fetch(`${API_BASE_URL}/api/interviews/${id}`,
+    getFetchOptions({ method: 'PUT', body: JSON.stringify(data) })
+  );
+  return handleResponse(res);
+}
+export async function deleteInterview(id: number) {
+  const res = await fetch(`${API_BASE_URL}/api/interviews/${id}`, getFetchOptions({ method: 'DELETE' }));
+  return handleResponse(res);
+}
+
+/* ======================== HEALTH ======================== */
+export async function healthCheck() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/health`);
+    return handleResponse(res);
+  } catch (error) {
+    return { status: 'offline', error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\middleware.ts | Size: 0.00 MB | Modified: 2026-03-02 13:47:34 =====
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+// frontend/src/middleware.ts
+export function middleware(req: NextRequest) {
+  const token = req.cookies.get("auth_token")?.value;
+  const { pathname } = req.nextUrl;
+  const isDashboard = pathname === "/";
+  const isAuthPage = pathname === "/auth/login" || pathname === "/auth/signup";
+
+  // TEMP: don't hard-block when cookie missing; let client-side token work
+  if (!token && isDashboard) {
+    return NextResponse.next(); // allow; client will fetch and redirect if truly not authed
+  }
+
+  if (token && isAuthPage) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/", "/auth/login", "/auth/signup"],
+};
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\favicon.ico | Size: 0.02 MB | Modified: 2026-03-02 05:51:13 =====
+         (  F          (  n  00     (-  –           ¾F  (                                                           $   ]   º   º   ]   $                                           ò   ÿ   ÿ   ÿ   ÿ   ò                               8   à   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   à   8                  â   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   â              ¡   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¡       #   ô   ÿ   ÿOOOÿ®®®ÿ«««ÿ«««ÿ«««ÿ«««ÿ­­­ÿgggÿ   ÿ   ÿ   ô   #   Y   ÿ   ÿ   ÿÿíííÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿýýýÿ555ÿ   ÿ   ÿ   ÿ   Y   »   ÿ   ÿ   ÿ   ÿkkkÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿŽŽŽÿ   ÿ   ÿ   ÿ   ÿ   »   »   ÿ   ÿ   ÿ   ÿ			ÿÍÍÍÿÿÿÿÿÿÿÿÿäääÿÿ   ÿ   ÿ   ÿ   ÿ   »   Y   ÿ   ÿ   ÿ   ÿ   ÿJJJÿýýýÿÿÿÿÿkkkÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Y   #   ô   ÿ   ÿ   ÿ   ÿÿ¶¶¶ÿÕÕÕÿ			ÿ   ÿ   ÿ   ÿ   ÿ   ô   #       ¡   ÿ   ÿ   ÿ   ÿ   ÿ111ÿDDDÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¡              â   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   â                  8   à   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   à   8                               ò   ÿ   ÿ   ÿ   ÿ   ò                                           $   ]   º   º   ]   $                                                                                                                                                                                                                                                                                    (       @                                                                               ,   U      è   è      U   ,                                                                                      *   …   Ò   ù   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ù   Ò   …   *                                                                      –   ó   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ó   –                                                          Q   á   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   á   Q                                               r   û   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   û   r                                       r   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   r                               O   û   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   û   O                          ä   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ã                      —   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   —               (   õ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ô   '           †   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ888ÿ‹‹‹ÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿˆˆˆÿ‰‰‰ÿ___ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   †          Ô   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿîîîÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿSSSÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ô      +   ú   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿhhhÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ®®®ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ú   +   T   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿËËËÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿôôôÿ,,,ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   T   ‚   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿGGGÿýýýÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ      é   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ­­­ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿäääÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   é   é   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ+++ÿóóóÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿjjjÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   é      ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ‹‹‹ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÌÌÌÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ‚   T   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿãããÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿýýýÿIIIÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   T   +   ú   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿhhhÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¯¯¯ÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ú   +      Ô   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿËËËÿÿÿÿÿÿÿÿÿôôôÿ,,,ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ô          †   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿGGGÿýýýÿÿÿÿÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   †           '   ô   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ±±±ÿìììÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   õ   (               —   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ333ÿ___ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   —                      ã   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ä                          O   û   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   û   O                               r   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   r                                       r   û   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   û   r                                               Q   á   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   á   Q                                                          –   ó   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ó   –                                                                      *   …   Ò   ù   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ù   Ò   …   *                                                                                      ,   U      è   è      U   ,                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               (   0   `           -                                                                                             	   (   L   j   ³   ø   ÷   ³   j   K   (   	                                                                                                                                          V       Ø   ø   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ø   Ø       U                                                                                                                      %   ‹   á   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   á   ‹   &                                                                                                      ‹   ï   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ï   ‹                                                                                          Q   Ü   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ü   R                                                                              Š   þ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   þ   Š                                                                     ­   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ­                                                             ¸   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¸                                                     ®   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ®                                              Š   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Š                                       P   ý   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ý   O                                  ß   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ß                              ‹   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ‹                       #   ñ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ñ   #                   Œ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ‹                  ä   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ$$$ÿhhhÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿeeeÿPPPÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ä              U   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿëëëÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿsssÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   U           ¡   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿeeeÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÌÌÌÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¡       	   Ú   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿÉÉÉÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿýýýÿHHHÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ú   	   (   ù   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿEEEÿüüüÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ®®®ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ø   (   K   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿªªªÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿôôôÿ,,,ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   L   j   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ)))ÿòòòÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿŒŒŒÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   j   ´   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿˆˆˆÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿãããÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ³   ø   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿáááÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿiiiÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ø   ø   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿeeeÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿËËËÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ø   ³   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿÉÉÉÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿýýýÿHHHÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ´   j   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿEEEÿüüüÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ®®®ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   j   L   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿªªªÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿôôôÿ,,,ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   K   (   ø   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ)))ÿòòòÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿŒŒŒÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ù   (   	   Ú   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿˆˆˆÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿãããÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ú   	       ¡   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿáááÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿiiiÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¡           U   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿeeeÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÌÌÌÿÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   U              ä   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿÿÉÉÉÿÿÿÿÿÿÿÿÿýýýÿHHHÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ä                  ‹   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿEEEÿüüüÿÿÿÿÿ®®®ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Œ                   #   ñ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ¬¬¬ÿûûûÿ,,,ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ñ   #                       ‹   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ222ÿ}}}ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ‹                              ß   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ß                                  O   ý   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ý   P                                       Š   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Š                                              ®   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ®                                                     ¸   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ¸                                                             ­   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ­                                                                     Š   þ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   þ   Š                                                                              R   Ü   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   Ü   Q                                                                                          ‹   ï   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ï   ‹                                                                                                      &   ‹   á   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   á   ‹   %                                                                                                                      U       Ø   ø   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ÿ   ø   Ø       V                                                                                                                                          	   (   K   j   ³   ÷   ø   ³   j   L   (   	                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ‰PNG
+
+   
+IHDR         \r¨f   sRGB ®Îé   8eXIfMM *    ‡i                                D"8s  IDATxí]	°Õ™n”]<QVA–èÄh$	ÊNŒŽ13*ˆq°ÂdªÄ©I¡ˆ˜D“L2“ª(Î(Ô˜2ÖÄ™ÑG	‹Áq_@å±ˆà†ŠxÈ›ï»Ð¾{o÷½½ÓýýUß{}»OŸå;çÿûôùÏ9ÝÂ‘d®(Dg Ð8	èôN º]€î@ hx¥?v 
+ÀNà3à=`;ð6ð.ð&°àuâà  ±”6‰P©Ð½€Á@ÿÃ RÓ PùiZqÊ^DNãà€wp¼
+Ø¼ÐXÐhÐ˜Hg@ÀÌ
+:Ùâ|ð5` p"@À'¼É²™s{
+ëpü*ð2ÀÞ…Ä d Ò¯Œ–È|(0ø
+0 à“>Kò
+³xX¬6 IJÈ ¤C|?$KENØ}Ï“|ŠÂòµáàöh $	2 Ù|/§Â . Nz ’#¼ÃW€eÀ
+à5€ã
+’ˆÜ¶ˆúà;Ày •¾ ñgàs©h^  IÄÈ DL(¢;¸8 ÒHjg€cH|x 1 ËR"Œa€ïôÓ• GÁÙ@…è9`/`%0è
+HÄ@jð½~,° ÛK
+Ÿ,t).ÎèI‘ˆDèT¦Oû)~º°Vìu$b èª›
+ÐU%¥7“ƒ¨›ù _É$b 8Aç×À€ßøJö3` 510wQñ?¤øvrðÑá:ü2þKÄ@ ¤øv*{%#í‚AZ€å’^(õÏ=ñ³g \ãÀWƒÛ€É!:àß,`à6ýÏ643:@’c.FÙŸ¤ðùä€u?Ð<'áÝ€ƒ€”_Üvp: É8Q¾›
+IñÅ·
+p{3ÎóÐkHÈ¢ŒG¡ž¼•®cñÑ¼
+<62&‹
+×2uCÁÿàÚòæ•­ßâ¤Tø3Ú
+½ê
+€›…;î¼”ªd/~m€½.ø’XÆ@{äw.°ð«d]G•Ú {lKÜàEbœÿý(P©RuMüTÛC›ÒÚÃ
+Àdäï])¿Œ_Lmà=Äû=@bœÍ÷K€ÛGUkÙ^œUÓØÆØÖøš)1€È»gÕT¢ÂŠ¯°m`9Ú\Ú®³ÀQþÍ@ØÊÔýâ°–6ð:ÚžÕ^›w¬òï¸E—D¤Á ç	ü5°àºëÄFÐ,ßÜ
+ðX"Òd€mð<€nB~òì@´¸÷µt×tx‹»
+ü;ÚfÞ>ñ“ªíI8µˆ»¿8Ó¸C1Ûª$B¸•§e†©Ý+þ’jl«ÜEZÃÇ& ©ÊS:â:Š6°möë´ÿ\G1¥ç`¢¨Å!“nl»lÃÆŠÉ^€Q`í·@OcÙSÆÄ@e¸Í·º¹ç¤qbªp•ÿãS†Ä@upšº±FÀD@å¿Ð“¿º†¦Ðæ2@#À¹ÆõL3 £A’”$H2Ç _hž¶FH#rq(íÿOàDƒò¤¬ˆ¨àrunGOWaêbŠ &–SgDñ3ÀEDçto§*Ç¤šú¡Ä9kŠÝ~)¿•¡,$Â x¿RŸ1˜vàK áÀ9€DäU(ðw®&LEÒäê©»€S)¹é3ÐY8x8 $.i€(íŒÄK¬Å€YœŽìðaÈ]­—´À4”ôÇ€	c‰“®Å@3¸fà€ó•4Æ Æ¢„ÿ
+Ð/*bàüþ Çþ˜$!I€~‡Ø7ÉB*-1`	o Ÿ º	‘$»àÇ¡D‹¾‰”L‰ˆûàòß êJ"’äÀOQ¢Ë)•ö2@#Ðx4‰"$e ¨ø·Iö8’àOiˆ8ø"Ý ¼GäÞ8[xÄt<ñ.´´7&‚m&ØŽR^‹³tq÷ Ø•á.¾§ÅYÅ-2È ½d§ ûã*_Üà&d|j\™W¼b ãôGùö«â*gœ¯ £‘é‡ÄF4ã"IñŠØƒ´/ b1q€NÈðãÀY€Dˆp¼ŒÛ9îãpÑ}w\¯ ó‘Ô¤£“Ó1 j`€èOûŸî­xK=€ÑHñ÷ ÷A“ˆ1
+Ÿ#¾
+D:U8jÀõýtù©ë$b bžA||ØU¼Q¿ü26%ªÌ)1 Šè…_
+Àê¢³!~DÙàºæ• ¿à+b >A´Ü:]ÑE$ˆ£50òGDhRÑtèÐÁéÝ»wRÉ)ðPÇ ‘èn$‘ 3ÜÖë@bS§Nu–,Yâ´jÕÊ²œç:»¡ôÜ;ÀáÀßó@£`Ç|ã–-[)“'OVýÙÕ†©sFxÚ®“âÛ¥øn}Í›7¯ üü³~ýúÆºº:»ŒÀQ—©J_¤ÎUKj8–q0xðàÆ;v4 Ìž=[õhW=¾	Ýë	¤&·!e5Ë8hÑ¢EãÝwß]¤üüñá‡6öïß_õiW}þSZÚ?	¿/`Ÿ;vlã¾}ûŽ2 <±hÑ" »À§ÐAî¹‘¸ÜÕX,ã mÛ¶+V¬(©ü<¹wïÞÆ#F¨^íª×;“ÖþaHðc ûà”)SÊ*¿{aùòåpÊØc89(Ñ^€žþö4Ž&E¦ÛoÃ†
+®žWü/· uÆ=±^€žþ*?{k^·_EíÇÅúúz¹íªgö† UI-‹è{WU*
+œ:pû9.tÚ·o(/Ýºus>ûì3ç‰'ž^Rg€ßäÚžGâÌI_D®‘»žåÜ~~½ ¹­{
+øúÙ?N0‘7½SêØ.Æ×¸ÿ~?}/y]nA;êØ£‹³ã2 ]ñFOB2C?·_I­÷œ”[Ð:°:Ú=#ÀOzKé-ã ˆÛÏ£ï%å´®Ý?jÐþIÀ®†PÛ¯¤æ{NÊ-hUÝÿt•:™œƒ˜øõ ,â ·ŸG×KÊ-hUÛç¢cƒhP7 ÿÎ¡Â˜Á@µn?¿\Ó-¸k×.¹ýˆ2ã:õú ð`ÙáF„Û=ý-á V·_ÉG¿ç¤Ü‚Vé Ýõ}¢0 WIù­ªøFºýÊ­öóèsM‡rZÕ8pJ¸QÜ*@OK8ëöó³
+rZ¥ÔÝ–a, ßûwË ØSéW^y¥Ÿ‡¾.· 5íat7ÔØÝ¤üÖTv#Ý~7n­àA"¸üòËÕ+´£WøèpMÂÅ/ªhK8ˆÒíçgä´F/^„·«ÅŒÀM{e ì¨èR›|ú)qØë7Ýt“æ?8'àµ€KùíP~ºýî¹çž°ú\õýrÚÑ> Ç·Uk ØeP÷ß|ë^xÇéöó³
+‹/V/Àüvòô™¯ôå„ä¢*×pâvûù ¹­Ð¾ÊŸ]JûË}óˆk8(•ˆÎÅÇÀÄ‰Ñ£GÇ—€OÌmÚ´q,X oúð”òe.â˜^ ¡QxÐÓßp’tûùõä4^_ƒN—{à†¾øÅyÄ2 †s¤ÛÏÏ Ð-Ø¹sgµsÛÌÐiêv‘”Z
+8
+!~PJ?Œc€«ýîºë®À›|Æ] ®Ü½{·³zõê¸“Rüµ1pnãÔàzïí¥º¼tlpû9³fÍrºvíjTæ®¿þzß4*OÊLã‹~•øÑçžÔ•3˜ƒ4Ý~~¯r­;ÔmêxYŒ+üÀ€€¡¤íöó3 r­;Ômêx“4à÷Å:7]ÕqLš4)U·Ÿ!rú1”êuê6¿ìÕ$Í
+À7›®èÀ8ºwïîÌ™3Ç¸|5Ï>?î\zé¥ÍOë·œëÍ†× ðø,ïE›ÅÀŒ3œš•©2¹¹å–[œººº2Wu:E¾‚´›¼^p.H1cJºtû]}õÕB˜uéÔSOu®ºŠ»ÉIc€Ož¥òÄ%ƒ 
+ ÆAZ«ýüüü®kµ ‘ºD?Ç5 Þ@Q×À
+ ÿé3Àwê+®¸"ýŒT™ÎSÀžUÞ¥à13Àî?ûâ5 M'Ý‹úŸ>pûþZµj•~fjÈ
+×ˆ×¡Ô‚n©¦±>× ðÿi5D¤[bf íÕ~a‹'·`Xc¹Ÿã -¼1ók¢›½ÿÄI«ýüÞ÷ý®kµ QºÅ¯|ókßMËé(92È@’t°ÉíçÇÝ‚X-èL×“a€úN4€“qÜž'$f0@·
+@V„nA›Ü˜Yá½L9:â|/^sÇ ú—	¨Ó)0`êj¿°T\wÝuZ-–ÄèîÂ¨\ 	@Ñ:¦±cítûùœ{È-èÇRb×û1%× ôI,Y%T‘ÛÝ~‡‹rú1”ØõÂCŸ€,¼$–´*Ë€é«ýÊf<à¹0zþŽ¥èhÕFü„û¦ ·Ÿ«ý|â€¯8Z-èCRü—¹Tg× ÐHRf€‹glYí–ª¹sçÊ-–Äp÷Ó'+ŽÃèî¶mµ_Ø’gÍÍ–îçC¿{ ô	òÃ’”ÈªÛÏÎ™3gÊ-èGR|×¹7`G€Þñ¥¡˜ƒ0U·Ÿ_ÙµZÐ¡Ø¯ŸD )À±ó\>¬»ýÊ—üÐ¹ýŠõz N–¤Ä@ÖÝ~~´Ê-èÇP¬×{rs€¿´@¬<—Žœ›|.]ºÔ¸|”Îm|gûõëç¬_¿Þyå•WâKD1—bàM½”¢%¡s\“·Ÿ¥rú1Ëõnì\–Æ’„"-É Ý`.4æÛ~%3™àI}[0A²$µ“= -Ò>BH"G®Û^r„­<ÂEBGÝi Ú%”˜’9Ì@^Ý~~
+@«ýŠüú1Üì€†@’ tû-[¶ÌèÏ{%@CÙ$ðmAgüøñÎš5kÊ†Ñ…ÈøœŠ/åŒOÿˆlßäÓ¿„áBÐ@.X°À±uäp¥Oüî6œ—x²9MPn¿`ß·o_§¾¾^nÁ`t…
+¥§(úª»™ƒ\rûùsÆAÒyóæéÛ‚þT…¡@h
+ƒE0lØ0çÎ;ïtÚµÓ˜kÆ¸N ¡¡ÁYµjUà
+S#ì|^ã½º- |¢ÝpÃ
+N—.…­ØÞ¥`×^{­zLñ6ƒƒ4 ŸÄ›†bç¨öe—]&"ªd€sÎœ9UÞ¥àU0ð!
+ÀÁ*nPÐ*`—ÿæ›oÖ¨v•¼¹Ái8GåþÔÿhh ØmœŠÍËÀäÉ“sÏ=×{JÇU0ÀÕ‚óçÏwZ·æþ’ˆø”ƒ€ì›ö8bEzôèá,Y²Dïþ![CŸ>}œ7:k×®
+“noÆÀfö >jvR?#b€ƒXˆ(¶üFÃAT¾FÕÕióêˆ[Á{ì°zvÄç>º¡C‡Êía+[0B2Dµœ=€íG~ë(
+øÄºñÆÕõ‚LO×\sÜ‚>"8|‹`[)
+&Lp8ø'‰–öäŒ”Óí4 oGeÎ#£ÛÀlÙ’_\“DÍ€Ü‚‘2ZØl¢Üi´9ŽŒ
+täÈ‘9f Þ¢Ë-¿œ¼‹=€‡YÌyˆn?uQã¯}XÍ¬ÍsAïi >=ŒÐ1æ=RÉí+à +
+­Ü‚¡¸.2 šŠKì«·ßôéÓCÆ¢Ûƒ20hÐ ‡Ë«%53À5@…MA¹%˜¦×Ì£ãÈí‚¼·j[õä9Î;¸û _(¯ú§¿µ0ÀÕ~rûÕÂ\¸{ômÁPüÜÿ®x#TT9¾™n?¾Êí—N# á•×¥&î}× ¬¯)
+ÝTVL¯!¸ßÔjÁªë`ïp
+ ß8@RrûUAVŒAå¬šÜ=¸ã-Þå€÷pLHª`@n¿*ÈŠ1¨Ü‚U“Ëõ?}w
+ ]ìH2@·ß´iÓ†V°¸ [Ë¯%àôÿ‚ëß5 8±)Ð­
+T`€›|rZbZ-¸.Ö!da+@× ðÎçßžó€Zígf[0p½¼æ†ô žä¤ I´Égr¸$· o%PÇ_rCy
+ÀVœ|ß½ ÿ¥à"mòYšÎÊ-è[ lÚÄk xAã ø“Û¯9]¢[pÒ¤IåÈ¨¬pP“ÇÏk ŠºFeÙÌÈígHEødƒnAm"Z–$Žõ5}„›‚zå8üéô2røX›|– ÅàSÜ»w¯³råJƒs™JÖ~T›fþz{ ÌÍ« ÷xÐj?jµàQ•EÝnò ðjsÀùÁ|GxÐ·ý<dXt(·àQ•EÝ.¬p¯47 Üð)÷¢þ;…Ïysµ_«V­D‡…È-XTiÔí¢ý?› †~¼è–œÿÛÏî ·`Qý=Vô?šòú^à
+€‚¹ºý–.]ª|XÞ
+ômÁB~€¿?ŠÆøJõ ÞD —·äüÜ~Ùh rê‘óÿ©ÛERªÀ…AÝ€óŠBæìÝ~wÜq‡Ó¾}ûœ•<›Å•[Ð¹5ûdóÚ-Õ`˜5 ?KqÝ~l4’ì0@·à)§œ’/I‚®(¼œà‡Ø‹ü…¥nÎê9¹ý²Y³4èœ!˜CÙˆ2×—*w9ÀÀGKÝõsî&Ÿrûe³¦súé¶? 6Ù8JÊ |(òuwOä´d°&K)‡nA¾Ê?RšÒn@7,·º8Á=‘õÿrûe½†•nÁM›69k×òM7óÂéý·J•´R€]†e¥nÊê9¹ý²Z³Ååâ /?áž“o>ŒÒó•¾¤”rzrÒÀ óó`åöóV{ö»uëæ4448«V­Êra÷ p³ îõQRZ”<{ädK.F9•½#~Tâ¾ûîs.¾øâìN%*Ë 
+ÀðáÃuë8G&“²¥ì/W:*x%á{Ã}@¦
+ »‚lõõõNc#çAIòÀÀ±Ç›õiÞ÷£Ë*?ëØ¯À0}€g€ãùC"Ä€pÛ¯³€Šßû¨4è–’Ò(bÀ8€_QùY” €áîr7'€—ˆ`·ÿî ùj ¸6à… *Œ©3ÀWögƒä"¨àl¢
+¡Âˆ1:ì±Sg}%È  	¹¥P?÷„þ‹1`›£¯ÉYÐ ãâŽ"‹‚Dª0b@¤Æ Ýö”Ÿ9¬¦Àðý¾[tá‰F1À‡ôp`kÐ\UÓ`œÜRø·A#W81 e`)RÛZMŠÕö ÷€[uæ‰F0ð	rq.ÀÕ¥Ú #^ð=C"Ä€9P'«R~f½– ï
+pn€zdC"Òe ¦§?³\K€÷½¨@&$b }jzú3Ûµö x/{èÄ1 Ra€#ÿ|÷çÆŸUK­= &Ä^€æTM¹n‘2À9ÿ5)?s¦Àû{O'ó‡DˆDà’ßo [kMÕoK0¿xÿŒ ÜTd‚_@]b ræ ÆGÃÄ¶À´; «€¯ò‡DˆDàêÜ1ÀgaRÛ`ÚÜ'`0ˆÂ  ‰>\ë/ù„ñ½fÐùƒøñ÷„ŽÅ€ˆß!fn÷Z¢|bŸ†ÜðU .t®åà¤ŸÑÀÚrª9Å+€›ý‘­€±î	ýb rnEŒDk”= æé8àÀÙü!b RžClã€PÞEÙ`¼ÜŒK†'~ß@‰ Ë}*°!`ø@Á¢6 Lô
+ ;À	$b@DÃÀ?#šÈgÞFý
+àµV”ˆ1ŽvýÇ;ÃEsôÝQ¹›ÇÌ=É®ö4¿ ßb@TÅÀn„þ!¹ò3q¼0^ÊV€ã c ‰µ1ðÜ¶´¶[ýïŠëÀM¹=8IˆÝ‰Õ1@Ú…@Cu··`N¸oÀã WJÄ€Æ WúÑåÇe÷±Iœ¯ n¦¹Nàmà¯€¸ÆÜ´ô_d(Ä4`EÜ…IÂ °¯œ"ÌµË1 *3ð+\þEå Ñ\MâÀÍ)g	rÁ¦
+»Œè¿8š>õ¿pô?vIÒ °0€Ç€~ü!b ˆ­øÅ$'Ó%"I¿“¿ŽRýÀi1 Ž0°‡? S~&Ô Ór…ä’Æ€¤{ nô_˜ÄÀÈÌLà?’ÎT€eäÔÆŽÀ7ùC"rÎÀOQ~"qIË ° O 8?$b §Ü‹rÿ#@×_â’v¼JÌ™‚£/¹é3ð'dá/ÈÖ÷W[¤¤›ço'Nü
+ðlóú-2Î Ûüå@jÊO~Óî0”À2` HÄ@ÆØ„òÐ+–ª¤ÝpOB® ÞuOè¿È(lãS€Ô•Ÿü¦9Èô½ò~ðcß:x/èXd„.ðù°Æ”ò˜d ÈÉVày@F $H2Å •Ÿïü+M*•i€Ül8O@F $H2Á •Ÿå®2­4& r´
+POÀ´Ö¢üÔÂ€ûä7NùYS
+ ó¶ øÀYƒ1`ðã;ÿJS3n² g['‘@W@"la`32Ên?'ûHB2p
+îhÄm€mu ‰“×j@F@˜ÜV ²­Z!¦¿xIä”ÉÿH®y™Ñ±)üù>ÀåZ!6 ºà”aÎ`äþ‚¦ÌdDV$9f€ëù	pM¿6»I¨!LG:\LdrwPyË~ýPá§%Ôæ•L3Æá7çTKÑÄAm€mo|³6©Ÿ	3Ðé-Òh J3¿¼?Ž67 á¶yr¶”"€ûþàgÈÎ4. $±1À÷ý_¼[*Š¸&¸¤˜S/õdq´Îìãä‰ÁCÞâh Š3¿¼>Š6Å¶%±€¶Èã\€#´RZq¦
+ð=lK|Å”XÆÀXäWSˆe j5 /¡ýÐÓ$±˜:äýv@½‚ †€Î8Ð×
+d„1(‡z2~Fà)´ùö3¢ôÍ‹ÁÞÀl€®C¿† ëùâè#´‰›í=².\Lt? %Ñ N$9b %Ê:àþƒ2ùä€u	 É1|-˜	ldòÁ÷œœt $b À@?ü¥·@† »FàcÔïÏ^€D”d€[9ýà zÙà€ŠÏ:
+HÄ@ ¾ŒP2v )~ ¦®@•àüïŸz5°Ç|€úÒ¿R«ÖµªàÁ|`# W39Ø‚ºá<î"-±0Àï\<ìdÒå€uÀoGLz 1œGp°à—e’å€¯d‹ .øj
+HÄ@jôFÊ3€•@ c{s<ÿùJ&	É@‹÷ëöb¸ÙÀw‹  ²§ ©nÁµàvðœ²û< ‰ˆ€ˆˆ,M;œû*p>p!0hHüà{=•ž»ðüxà]IÄÈ DLh™èÚâ<'¡Œh8Ç@V Á#ïã˜Jÿ°àfû IŒÈ ÄHn…¨ûãWŸ}àNÆt[uò$Ÿ¢°›§å þ
+@’ 2 	’]&)Ž† #€3ˆ“,	=%¯TôÕÀkÀ&à  I‰€”ˆ÷I¶®Ó³ð Ù[8	è	´L–]È]tïTðgõÀ6à-@b2 U†OVºã:
+ 
+A?€¯
+} .iî|	àxCœÂ÷rvßw; ÎÀ#ê>éi 8_b82 †WP€ìÑõè Ž {'n¯áÓ8ðz;€Æ¤yÝŽsŸ œÃ@¥¦¼P¡·o|ÂSùih $3ðÿ@ß¹jìŠá    IEND®B`‚
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\globals.css | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+/* MUST BE FIRST IN FILE */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: #f0f4ff;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes progressRing {
+  from { stroke-dashoffset: 251; }
+  to { stroke-dashoffset: 63; }
+}
+
+.animate-fade-up {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease forwards;
+}
+
+.progress-ring-fill {
+  animation: progressRing 1.5s ease forwards;
+  animation-delay: 0.3s;
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\layout.tsx | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+import type { Metadata } from 'next'
+import './globals.css'
+
+export const metadata: Metadata = {
+  title: 'InterviewPrep - AI Mock Interview Platform',
+  description: 'Prepare for your next job interview with AI-powered mock interviews',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className="min-h-screen bg-slate-950 text-slate-100 antialiased">
+        {children}
+      </body>
+    </html>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\page.tsx | Size: 0.02 MB | Modified: 2026-03-02 05:51:13 =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { clearAuthCookie } from "@/lib/auth";
+import { getDashboard, type DashboardData, logout } from "@/api";
+import { Home, CheckCircle, FileText, BookOpen, Mic } from "lucide-react";
+
+/* ---------------------- Inline SVG Icon Components ---------------------- */
+
+const SearchIcon = () => (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
+
+const BellIcon = () => (
+  <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+  </svg>
+);
+
+const ChevronRightIcon = () => (
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+const ChevronDownIcon = () => (
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+  </svg>
+);
+
+const CalendarIcon = () => (
+  <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="#1a3bcc" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+);
+
+const LightbulbIcon = () => (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#1a3bcc" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+  </svg>
+);
+
+const DatabaseIcon = () => (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#1a3bcc" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+  </svg>
+);
+
+const NetworkIcon = () => (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#1a3bcc" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+  </svg>
+);
+
+/* ---------------------------- Small Components --------------------------- */
+
+function ProgressRing({ percentage }: { percentage: number }) {
+  const radius = 50;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 110, height: 110 }}>
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle cx="55" cy="55" r={radius} fill="none" stroke="#e8eeff" strokeWidth="10" />
+        <circle
+          cx="55"
+          cy="55"
+          r={radius}
+          fill="none"
+          stroke="#1a3bcc"
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform="rotate(-90 55 55)"
+          style={{ transition: "stroke-dashoffset 1.5s ease" }}
+          className="progress-ring-fill"
+        />
+      </svg>
+      <div className="absolute text-center">
+        <span className="text-2xl font-bold text-gray-800">{percentage}%</span>
+      </div>
+    </div>
+  );
+}
+
+function SidebarItem({
+  icon,
+  active = false,
+  label,
+  isMenuOpen,
+}: {
+  icon: React.ReactNode;
+  active?: boolean;
+  label: string;
+  isMenuOpen: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 cursor-pointer transition-all duration-300 px-3 py-2 rounded-xl ${
+        active ? "bg-white text-blue-700 shadow-md" : "text-blue-200 hover:bg-blue-600 hover:text-white"
+      }`}
+    >
+      <div className="w-8 h-8 flex items-center justify-center">{icon}</div>
+      {isMenuOpen && <span className="text-sm font-medium">{label}</span>}
+    </div>
+  );
+}
+
+function QuickStartItem({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 bg-blue-50 rounded-xl cursor-pointer hover:bg-blue-100 transition-all duration-200 group">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">{icon}</div>
+        <span className="text-sm font-semibold text-gray-700">{label}</span>
+      </div>
+      <div className="text-blue-400 group-hover:text-blue-600 transition-colors">
+        <ChevronRightIcon />
+      </div>
+    </div>
+  );
+}
+
+function InterviewIllustration() {
+  return (
+    <svg width="120" height="90" viewBox="0 0 120 90" fill="none">
+      <rect x="10" y="65" width="100" height="6" rx="3" fill="#dbeafe" />
+      <circle cx="30" cy="45" r="12" fill="#bfdbfe" />
+      <circle cx="30" cy="32" r="8" fill="#93c5fd" />
+      <rect x="18" y="44" width="24" height="20" rx="12" fill="#bfdbfe" />
+      <circle cx="85" cy="45" r="12" fill="#fde68a" />
+      <circle cx="85" cy="32" r="8" fill="#fbbf24" />
+      <rect x="73" y="44" width="24" height="20" rx="12" fill="#fde68a" />
+      <rect x="38" y="20" width="40" height="18" rx="8" fill="#1a3bcc" />
+      <polygon points="42,38 38,44 50,38" fill="#1a3bcc" />
+      <rect x="43" y="25" width="24" height="3" rx="1.5" fill="white" opacity="0.7" />
+      <rect x="43" y="31" width="16" height="3" rx="1.5" fill="white" opacity="0.5" />
+    </svg>
+  );
+}
+
+/* ------------------------------ Main Page ------------------------------- */
+
+
+export default function Dashboard() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Dashboard data state
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+
+  // Fetch dashboard data on mount
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getDashboard();
+        setDashboardData(data);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load dashboard";
+        setError(message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+        setIsLoaded(true);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
+  // Use default values if data hasn't loaded yet
+  const progress = dashboardData?.progress ?? 75;
+  const sessionsCompleted = dashboardData?.sessionsCompleted ?? 12;
+  const totalSessions = dashboardData?.totalSessions ?? 20;
+  const avgScore = dashboardData?.avgScore ?? 86;
+  const user = dashboardData?.user ?? { name: "User", title: "Professional" };
+  const upcomingInterview = dashboardData?.upcomingInterview ?? { company: "Google", position: "Software Engineer", daysUntil: 5 };
+  const notifications = dashboardData?.notifications ?? 3;
+
+  const goToInterview = () => router.push("/interview");
+
+  const handleLogout = () => {
+    logout();
+  };
+
+  const navItems = [
+    { id: "home", icon: <Home size={18} strokeWidth={2} />, label: "Dashboard", href: "/" },
+    { id: "progress", icon: <CheckCircle size={18} strokeWidth={2} />, label: "Progress", href: "/progress" },
+    { id: "resources", icon: <FileText size={18} strokeWidth={2} />, label: "Resources", href: "/resources" },
+    { id: "study", icon: <BookOpen size={18} strokeWidth={2} />, label: "Study Plan", href: "/study-plan" },
+    { id: "interview", icon: <Mic size={18} strokeWidth={2} />, label: "Mock Interview", href: "/interview" },
+  ];
+
+  return (
+    <div className="flex h-screen bg-slate-100 overflow-hidden">
+      {/* Sidebar */}
+      <aside
+        className={`flex flex-col py-6 gap-6 transition-all duration-300 ${
+          isMenuOpen ? "w-56 px-4" : "w-20 items-center"
+        }`}
+        style={{ background: "linear-gradient(180deg, #1a3bcc 0%, #1430a8 100%)" }}
+      >
+        {/* Hamburger Button */}
+        <div
+          className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg mb-2 cursor-pointer"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+        >
+          <span className="text-blue-700 text-xl font-bold">{isMenuOpen ? "âœ•" : "â˜°"}</span>
+        </div>
+
+        {/* Nav Items */}
+        <nav className="flex flex-col gap-3 flex-1 w-full">
+          {navItems.map((item) => {
+            const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+            return (
+              <button key={item.id} onClick={() => router.push(item.href)} className="text-left w-full">
+                <SidebarItem icon={item.icon} active={active} label={item.label} isMenuOpen={isMenuOpen} />
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User + Logout */}
+        <div className="flex flex-col gap-2 mb-4 w-full px-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-300 border-2 border-white" />
+            {isMenuOpen && <span className="text-white text-sm font-medium">{user.name.split(' ')[0] || 'User'}</span>}
+          </div>
+          <button onClick={handleLogout} className="text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg py-2">
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Navbar */}
+        <header className="bg-white border-b border-blue-50 px-8 py-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3 flex-1 max-w-md">
+            <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-xl px-4 py-2">
+              <SearchIcon />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="bg-transparent outline-none text-sm text-gray-500 w-full placeholder-gray-400"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Bell */}
+            <div className="relative cursor-pointer">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-gray-500 hover:bg-blue-50 transition-colors">
+                <BellIcon />
+              </div>
+              {notifications > 0 && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">{notifications}</span>
+                </div>
+              )}
+            </div>
+
+            {/* User */}
+            <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl px-3 py-2 transition-colors">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow">
+                {user.name.split(' ').map(n => n[0]).join('').substring(0, 2) || 'U'}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{user.name}</p>
+                <p className="text-xs text-gray-400">{user.title || 'Professional'}</p>
+              </div>
+              <ChevronDownIcon />
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Body */}
+        <main className="flex-1 overflow-y-auto p-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              Error: {error} - Please refresh or contact support.
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">Loading dashboard...</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && dashboardData && (
+            <>
+              {/* Welcome */}
+              <div className={`mb-8 transition-all duration-500 ${isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+                <h1 className="text-3xl font-extrabold text-gray-900">Welcome, {user.name.split(' ')[0]}! ðŸ‘‹</h1>
+                <p className="text-gray-500 mt-1 text-base">Let&apos;s prepare for your next interview</p>
+              </div>
+
+              {/* Cards Grid */}
+              <div className="grid grid-cols-3 gap-6">
+                {/* Your Progress */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-100 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+                  <h3 className="font-bold text-gray-800 text-lg mb-5">Your Progress</h3>
+                  <div className="flex flex-col items-center gap-2">
+                    <ProgressRing percentage={progress} />
+                    <p className="text-gray-400 text-sm font-medium mt-2">Completed</p>
+                    <div className="w-full mt-4 grid grid-cols-2 gap-3">
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <p className="text-xl font-bold text-blue-700">{sessionsCompleted}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Sessions Done</p>
+                      </div>
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <p className="text-xl font-bold text-blue-700">{avgScore}%</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Avg Score</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Upcoming Interview */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-200 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+                  <h3 className="font-bold text-gray-800 text-lg mb-5">Upcoming Interview</h3>
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center">
+                        <CalendarIcon />
+                      </div>
+                      <div>
+                        <p className="text-xl font-extrabold text-gray-900">{upcomingInterview.company}</p>
+                        <p className="text-sm text-gray-400 mt-0.5">â€¢ {upcomingInterview.position}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-blue-50 rounded-xl py-4 px-6 text-center">
+                      <p className="text-lg font-bold text-gray-800">In {upcomingInterview.daysUntil} Days</p>
+                    </div>
+
+                    <button
+                      onClick={goToInterview}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl py-3 transition-colors text-sm"
+                    >
+                      Start Practice Session
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Start */}
+                <div
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-300 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+                  <h3 className="font-bold text-gray-800 text-lg mb-2">Quick Start</h3>
+                  <div className="flex justify-center my-3 opacity-80">
+                    <svg width="100" height="70" viewBox="0 0 100 70" fill="none">
+                      <rect x="20" y="30" width="60" height="35" rx="4" fill="#dbeafe" />
+                      <rect x="50" y="38" width="22" height="3" rx="1.5" fill="#bfdbfe" />
+                      <rect x="50" y="44" width="16" height="3" rx="1.5" fill="#bfdbfe" />
+                      <rect x="50" y="50" width="20" height="3" rx="1.5" fill="#bfdbfe" />
+                      <circle cx="35" cy="46" r="10" fill="#1a3bcc" />
+                      <circle cx="35" cy="42" r="4" fill="#bfdbfe" />
+                      <rect x="28" y="47" width="14" height="8" rx="8" fill="#bfdbfe" />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 text-center">Jump into a practice session</p>
+                  <div className="flex flex-col gap-2">
+                    <QuickStartItem icon={<LightbulbIcon />} label="Aptitude" />
+                    <QuickStartItem icon={<DatabaseIcon />} label="DSA" />
+                    <QuickStartItem icon={<NetworkIcon />} label="System Design" />
+                  </div>
+                </div>
+
+                {/* Mock Interview Prep - full width bottom */}
+                <div
+                  className={`col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-blue-50 transition-all duration-500 delay-400 ${
+                    isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                  }`}
+                >
+
+                  <h3 className="font-bold text-gray-800 text-lg mb-4">Mock Interview Prep</h3>
+                  <div className="flex items-center gap-8">
+                    {/* Illustration */}
+                    <div className="flex-shrink-0">
+                      <InterviewIllustration />
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex-1 flex items-center gap-8">
+                      <div>
+                        <p className="text-3xl font-extrabold text-gray-900">
+                          {sessionsCompleted}/{totalSessions}
+                        </p>
+                        <p className="text-sm text-gray-400 mt-1">Sessions completed</p>
+                      </div>
+                      <div className="w-px h-12 bg-gray-100" />
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                          Average Score
+                        </p>
+                        <p className="text-3xl font-extrabold text-blue-600">{avgScore}%</p>
+                      </div>
+                      <div className="w-px h-12 bg-gray-100" />
+                      <div className="flex-1">
+                        <div className="flex justify-between text-xs text-gray-400 mb-2">
+                          <span>Progress to goal</span>
+                          <span>
+                            {sessionsCompleted}/{totalSessions}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-blue-50 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-600 rounded-full transition-all duration-1000"
+                            style={{ width: `${(sessionsCompleted / totalSessions) * 100}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          {["HR", "Technical", "Behavioral", "System Design"].map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-sm bg-blue-50 text-blue-600 px-4 py-2 rounded-lg flex items-center justify-center"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Continue button */}
+                    <button
+                      onClick={goToInterview}
+                      className="flex-shrink-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-6 py-3 transition-colors shadow-md shadow-blue-200"
+                    >
+                      Continue
+                      <ChevronDownIcon />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\api\auth\login\route.ts | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+import { NextResponse } from 'next/server'
+import { pool } from '@/lib/db'
+import crypto from 'crypto'
+
+export async function POST(req: Request) {
+  const { email, password } = await req.json()
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(password)
+    .digest('hex')
+    .toUpperCase()
+
+  const [rows]: any = await pool.query(
+    'SELECT id FROM users WHERE email = ? AND password_hash = ?',
+    [email, hash]
+  )
+
+  if (rows.length === 0) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+  }
+
+  const userId = rows[0].id
+
+  const response = NextResponse.json({ success: true })
+
+  response.cookies.set('auth_token', String(userId), {
+    httpOnly: true,
+    path: '/',
+  })
+
+  return response
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\api\auth\signup\route.ts | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+import { NextResponse } from 'next/server'
+import { pool } from '@/lib/db'
+import crypto from 'crypto'
+
+export async function POST(req: Request) {
+  const { name, email, password } = await req.json()
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(password)
+    .digest('hex')
+    .toUpperCase()
+
+  try {
+    await pool.query(
+      'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
+      [name, email, hash]
+    )
+
+    return NextResponse.json({ success: true })
+  } catch {
+    return NextResponse.json({ error: 'User already exists' }, { status: 400 })
+  }
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\auth\login\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 13:52:27 =====
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { login } from '@/api'
+
+export default function Login() {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!email || !password) {
+      setError('Please enter both email and password')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await login(email, password)
+      
+      // Store token in localStorage
+      localStorage.setItem('auth_token', response.token)
+      
+      // Redirect to dashboard
+      router.push('/')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed'
+      setError(message)
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-6">
+      <div className="w-full max-w-sm space-y-8">
+
+        <div className="text-center">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Sign in
+          </h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Continue your AI interview preparation
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+          
+          <input
+            type="email"
+              placeholder="Email"
+            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-white"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full rounded-md bg-slate-900 border border-slate-800 px-4 py-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-white"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+          />
+
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            className={`w-full rounded-md py-3 text-sm font-medium transition-colors ${
+              loading
+                ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+            }`}
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </div>
+
+        <p className="text-center text-sm text-slate-400">
+          Donâ€™t have an account?{' '}
+          <Link href="/auth/signup" className="text-indigo-400 hover:text-indigo-300">
+            Create one
+          </Link>
+        </p>
+        <p className="text-center text-sm text-slate-400">
+          <a href="/auth/forgot" className="text-indigo-400 hover:text-indigo-300">
+            Forgot your password?
+          </a>
+        </p>
+
+      </div>
+    </div>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\auth\signup\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 09:54:07 =====
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { signup } from '@/api'
+
+export default function Signup() {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!name || !email || !password) {
+      setError('Please fill all fields')
+      return
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await signup(name, email, password)
+      
+      // Store token if provided
+      if (response.token || response.user) {
+        localStorage.setItem('auth_token', response.token || '')
+        // Redirect to dashboard
+        router.push('/')
+      } else {
+        // Redirect to login if no auto-login
+        alert('Signup successful. Please sign in.')
+        router.push('/auth/login')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Signup failed'
+      setError(message)
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center px-6">
+      <div className="w-full max-w-md">
+        <div className="mb-10 text-center">
+          <h1 className="text-4xl font-bold text-white tracking-tight">
+            Create Account
+          </h1>
+          <p className="text-gray-400 mt-3">
+            Start your AI mock interview journey
+          </p>
+        </div>
+
+        <div className="bg-[#111827] border border-gray-800 rounded-xl p-8 shadow-2xl">
+          <div className="space-y-5">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+
+            <input
+              type="text"
+              placeholder="Full name"
+              className="w-full px-4 py-3 bg-[#1f2937] border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+            />
+
+            <input
+              type="email"
+              placeholder="Email address"
+              className="w-full px-4 py-3 bg-[#1f2937] border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              className="w-full px-4 py-3 bg-[#1f2937] border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+            />
+
+            <button
+              onClick={handleSignup}
+              disabled={loading}
+              className={`w-full py-3 transition rounded-lg font-semibold ${
+                loading
+                  ? 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+            >
+              {loading ? 'Creating account...' : 'Create Account'}
+            </button>
+          </div>
+
+          <p className="text-gray-400 text-sm text-center mt-6">
+            Already have an account?{' '}
+            <Link
+              href="/auth/login"
+              className="text-indigo-400 hover:text-indigo-300"
+            >
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\interview\page.tsx | Size: 0.01 MB | Modified: 2026-03-02 10:07:20 =====
+'use client'
+
+import { useSearchParams, useRouter } from 'next/navigation'
+import React, { useState, useEffect, Suspense } from 'react'
+import { getQuestions, type Question } from '@/api'
+
+const SAVE_MODE: 'none' | 'download' | 'upload' = 'none'
+
+type QA = {
+  questionId: string
+  text?: string
+  saved?: boolean
+  fileName?: string
+  uploaded?: boolean
+  uploadId?: string
+}
+
+function InterviewSessionPageContent() {
+  const search = useSearchParams()
+  const router = useRouter()
+  const via = search.get('via')
+  const role = search.get('role')
+  const company = search.get('company')
+
+  // State for questions
+  const [allQuestions, setAllQuestions] = useState<Question[]>([])
+  const [questions, setQuestions] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // State for interview session
+  const [started, setStarted] = useState(false)
+  const [idx, setIdx] = useState(0)
+  const [answers, setAnswers] = useState<QA[]>([])
+  const [buffer, setBuffer] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [showSavedToast, setShowSavedToast] = useState(false)
+
+  const isLast = questions.length > 0 && idx === questions.length - 1
+  const currentQ = questions[idx] || ''
+
+  // Fetch questions on mount
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        setLoading(true)
+        const data = await getQuestions({ limit: 30 })
+        setAllQuestions(data)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch questions'
+        setError(message)
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchQuestions()
+  }, [])
+
+  React.useEffect(() => {
+    if (!started) return
+    setBuffer(answers[idx]?.text || '')
+  }, [idx, started, answers])
+
+  const handleStart = () => {
+    // Randomly select 10 questions from fetched questions
+    if (allQuestions.length === 0) {
+      setError('No questions available. Please try again.')
+      return
+    }
+    
+    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5)
+    const selected = shuffled.slice(0, Math.min(10, shuffled.length))
+    const questionTexts = selected.map(q => q.text)
+    
+    setQuestions(questionTexts)
+    setAnswers(selected.map((q) => ({ questionId: q.id })))
+    setIdx(0)
+    setBuffer('')
+    setStarted(true)
+  }
+
+  const doDownload = (fileName: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const saveCurrent = async () => {
+    setSaving(true)
+    try {
+      const fileName = `answer-q${idx + 1}-${Date.now()}.txt`
+      const trimmed = buffer.trim()
+      if (SAVE_MODE === 'none') {
+        setAnswers(prev => {
+          const copy = [...prev]
+          copy[idx] = { ...copy[idx], text: trimmed, saved: true, fileName }
+          return copy
+        })
+      } else if (SAVE_MODE === 'download') {
+        doDownload(fileName, trimmed)
+        setAnswers(prev => {
+          const copy = [...prev]
+          copy[idx] = { ...copy[idx], text: trimmed, saved: true, fileName }
+          return copy
+        })
+      } else {
+        const fd = new FormData()
+        fd.append('questionId', `q${idx + 1}`)
+        fd.append('fileName', fileName)
+        fd.append('text', trimmed)
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        if (!res.ok) throw new Error('Upload failed')
+        const data = await res.json()
+        setAnswers(prev => {
+          const copy = [...prev]
+          copy[idx] = {
+            ...copy[idx],
+            text: trimmed,
+            saved: true,
+            fileName: data.fileName || fileName,
+            uploaded: true,
+            uploadId: data.id || undefined,
+          }
+          return copy
+        })
+      }
+      setShowSavedToast(true)
+      setTimeout(() => setShowSavedToast(false), 1400)
+    } catch (e) {
+      console.error(e)
+      alert('Failed to save. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const goNext = async () => {
+    if (!answers[idx]?.saved && buffer.trim().length > 0) {
+      await saveCurrent()
+    }
+    setIdx(i => Math.min(questions.length - 1, i + 1))
+  }
+  const goPrev = () => setIdx(i => Math.max(0, i - 1))
+
+  const finishInterview = async () => {
+    if (!answers[idx]?.saved && buffer.trim().length > 0) {
+      await saveCurrent()
+    }
+    router.push('/')
+  }
+
+  const canGoNext = (answers[idx]?.saved || buffer.trim().length > 0)
+
+  return (
+    <div className="min-h-screen bg-slate-100">
+      <header className="bg-white border-b border-blue-50 px-6 py-4 shadow-sm flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Mock Interview â€“ Session</h1>
+        <button onClick={() => router.push('/')} className="text-sm text-blue-600 hover:text-blue-700">Exit</button>
+      </header>
+
+      <main className="max-w-4xl mx-auto p-6">
+        {!started && (
+          <div className="bg-white border border-blue-50 rounded-2xl p-6 mb-6">
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                Error: {error}
+              </div>
+            )}
+            
+            <div className="mb-3">
+              {via === 'resume' ? (
+                <p className="text-gray-700">Starting interview based on your uploaded resumeâ€¦</p>
+              ) : (
+                <p className="text-gray-700">
+                  Starting interview for <span className="font-semibold">{role}</span> at{' '}
+                  <span className="font-semibold">{company}</span>.
+                </p>
+              )}
+            </div>
+            <ul className="text-sm text-gray-600 mb-4 list-disc ml-5 space-y-1">
+              <li>This session will randomly pick <strong>10 questions</strong> from our question bank.</li>
+              <li>Type your answers and click <strong>Save</strong> or go to the next question.</li>
+              <li>You can come back and edit any answer before finishing.</li>
+            </ul>
+            <div className="flex gap-2">
+              <button
+                onClick={handleStart}
+                disabled={loading || allQuestions.length === 0}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold ${
+                  loading || allQuestions.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {loading ? 'Loading questions...' : 'Start Interview'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {started && (
+          <div className="space-y-6">
+            <div className="bg-white border border-blue-50 rounded-2xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-sm text-gray-500">Question {idx + 1} / {questions.length}</p>
+                <div className="w-48 h-2 bg-blue-50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all"
+                    style={{ width: `${Math.round((idx / questions.length) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <p className="text-gray-900 font-medium mb-3">{currentQ}</p>
+
+              <div className="space-y-3">
+                <textarea
+                  value={buffer}
+                  onChange={(e) => setBuffer(e.target.value)}
+                  className="w-full min-h-40 md:min-h-48 border border-gray-300 rounded-lg p-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Type your answer here..."
+                />
+
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    {answers[idx]?.saved ? (
+                      <span className="text-green-600 font-medium">Saved</span>
+                    ) : buffer.trim().length > 0 ? (
+                      <span className="text-gray-500">Unsaved changes</span>
+                    ) : (
+                      <span>Start typing your answerâ€¦</span>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveCurrent}
+                      disabled={saving || buffer.trim().length === 0}
+                      className={`px-4 py-2 text-sm rounded-lg font-semibold ${
+                        buffer.trim().length > 0
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {saving ? 'Savingâ€¦' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-6">
+                <button
+                  onClick={goPrev}
+                  disabled={idx === 0}
+                  className={`px-4 py-2 text-sm rounded-lg border ${
+                    idx === 0 ? 'text-gray-400 border-gray-200' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  Previous
+                </button>
+
+                {!isLast ? (
+                  <button
+                    onClick={goNext}
+                    disabled={!canGoNext || saving}
+                    className={`px-4 py-2 text-sm rounded-lg font-semibold ${
+                      canGoNext && !saving
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Next Question
+                  </button>
+                ) : (
+                  <button
+                    onClick={finishInterview}
+                    disabled={saving}
+                    className={`px-4 py-2 text-sm rounded-lg font-semibold ${
+                      !saving ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Finish Interview
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {showSavedToast && (
+              <div className="fixed bottom-6 right-6">
+                <div className="bg-white border border-green-200 shadow-lg rounded-lg px-4 py-3 flex items-center gap-2">
+                  <span className="text-green-600 text-lg">âœ“</span>
+                  <span className="text-sm font-medium text-gray-800">Saved</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+export default function InterviewSessionPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center"><p>Loading interview...</p></div>}>
+      <InterviewSessionPageContent />
+    </Suspense>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\interview\session\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 10:09:46 =====
+'use client'
+
+import { Suspense } from 'react'
+import { useRouter } from 'next/navigation'
+
+function InterviewSessionContent() {
+  const router = useRouter()
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-white mb-4">Interview Session</h1>
+          <p className="text-slate-300 mb-8">Coming soon...</p>
+          <button
+            onClick={() => router.push('/')}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function InterviewSessionPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center">Loading...</div>}>
+      <InterviewSessionContent />
+    </Suspense>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\progress\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 10:10:04 =====
+'use client'
+
+import { Suspense } from 'react'
+import { useEffect, useState } from 'react'
+import { getProgress, type ProgressData } from '@/api'
+
+function ProgressRing({ percentage }: { percentage: number }) {
+  const radius = 50
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (percentage / 100) * circumference
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 140, height: 140 }}>
+      <svg width="140" height="140" viewBox="0 0 110 110">
+        <circle cx="55" cy="55" r={50} fill="none" stroke="#e8eeff" strokeWidth="10" />
+        <circle
+          cx="55"
+          cy="55"
+          r={50}
+          fill="none"
+          stroke="#1a3bcc"
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform="rotate(-90 55 55)"
+          style={{ transition: 'stroke-dashoffset 1s ease' }}
+        />
+      </svg>
+      <div className="absolute text-center">
+        <span className="text-3xl font-extrabold text-gray-900">0%</span>
+        <div className="text-xs text-gray-400">Overall</div>
+      </div>
+    </div>
+  )
+}
+
+function ProgressContent() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(false)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading progress...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-8">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          Error: {error}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">Your Progress</h1>
+        <ProgressRing percentage={0} />
+        <p className="text-center text-gray-600 mt-4">Progress tracking coming soon</p>
+      </div>
+    </div>
+  )
+}
+
+export default function ProgressPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProgressContent />
+    </Suspense>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\resources\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 10:10:13 =====
+'use client'
+
+import { Suspense } from 'react'
+
+function ResourcesContent() {
+  return (
+    <div className="min-h-screen bg-slate-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">Resources</h1>
+        <p className="text-gray-600">Resources coming soon</p>
+      </div>
+    </div>
+  )
+}
+
+export default function ResourcesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ResourcesContent />
+    </Suspense>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\app\study-plan\page.tsx | Size: 0.00 MB | Modified: 2026-03-02 10:10:27 =====
+'use client'
+
+import { Suspense, useEffect, useState } from 'react'
+import { getStudyPlan, type StudyPlanDay } from '@/api'
+
+function StudyPlanContent() {
+  const [plan, setPlan] = useState<StudyPlanDay[]>([])
+
+  useEffect(() => {
+    setPlan([
+      { day: 'Day 1', items: ['DSA: Arrays & Strings (60m)', '2 HR questions (20m)', '1 Mock warmup (20m)'] },
+      { day: 'Day 2', items: ['DSA: HashMap/Set (60m)', 'Behavioral story: conflict (20m)', 'Revise notes (20m)'] },
+      { day: 'Day 3', items: ['System Design: requirements  API (60m)', 'Caching basics (30m)', 'Latency/bandwidth (10m)'] },
+      { day: 'Day 4', items: ['DSA: Trees/Graphs (60m)', 'Mock Interview 1 (30m)', 'Retro & notes (30m)'] },
+      { day: 'Day 5', items: ['System Design: storage/replication (60m)', 'OS/DB basics (30m)', '1 HR set (15m)'] },
+      { day: 'Day 6', items: ['DSA: DP starter (60m)', 'Complexity drills (20m)', 'Mock Interview 2 (30m)'] },
+      { day: 'Day 7', items: ['Review weak areas (60m)', 'Behavioral stories polish (30m)', 'Light practice (30m)'] },
+    ])
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">Weekly Study Plan</h1>
+        <div className="grid gap-4">
+          {plan.map((day, i) => (
+            <div key={i} className="bg-white rounded-lg p-6 shadow">
+              <h2 className="text-xl font-semibold text-gray-800 mb-3">{day.day}</h2>
+              <ul className="space-y-2">
+                {day.items?.map((item, j) => (
+                  <li key={j} className="text-gray-600"> {item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function StudyPlanPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <StudyPlanContent />
+    </Suspense>
+  )
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\lib\auth.tsx | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+"use client";
+
+export const AUTH_COOKIE = "auth_token";
+
+export function setAuthCookie(value: string, days = 1) {
+  const expires = new Date();
+  expires.setDate(expires.getDate() + days);
+  document.cookie = `${AUTH_COOKIE}=${value}; path=/; expires=${expires.toUTCString()}; SameSite=Lax`;
+}
+
+export function clearAuthCookie() {
+  document.cookie = `${AUTH_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\frontend\src\lib\db.ts | Size: 0.00 MB | Modified: 2026-03-02 05:51:13 =====
+import mysql from 'mysql2/promise'
+
+export const pool = mysql.createPool({
+  host: '127.0.0.1',
+  user: 'root',
+  password: 'SQL@123PPa',
+  database: 'interview_app_database',
+  waitForConnections: true,
+  connectionLimit: 10,
+})
+
+
+===== RUN END: 2026-03-02 14:04:17 =====

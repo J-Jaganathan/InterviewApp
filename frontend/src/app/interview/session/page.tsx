@@ -1,512 +1,188 @@
-'use client'
+"use client";
 
-import { useSearchParams, useRouter } from 'next/navigation'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useState } from "react";
+import { getRandomQuestions, type Question } from "@/api";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-/**
- * CONFIG
- * RECORD_MODE:
- *  - 'per-question' : one clip per question (we will NOT download automatically)
- *  - 'continuous'   : one clip for the whole session (stop at the end)
- */
-const RECORD_MODE: 'per-question' | 'continuous' = 'per-question'
-
-// Auto move to next question after a per-question save
-const AUTO_NEXT_AFTER_SAVE = true
-
-/**
- * SAVE_MODE:
- *  - 'none'     : DO NOT auto-download or upload the videos; keep in memory only (Blob URL)
- *  - 'download' : Auto-download each recorded clip (old behavior)
- *  - 'upload'   : POST to /api/upload (requires API route)
- */
-const SAVE_MODE: 'none' | 'download' | 'upload' = 'none'
-
-type QA = {
-  questionId: string
-  fileName?: string
-  blobUrl?: string
-  uploaded?: boolean
-  uploadId?: string
-  recorded?: boolean   // ✅ mark as recorded even if not saved
+// Helper component for the result phase
+function Tile({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">{title}</div>
+      <div className="text-lg font-semibold text-slate-800 mt-1">{value}</div>
+    </div>
+  );
 }
 
-const QUESTION_BANK: string[] = [
-  'Tell me about a challenging problem you solved recently.',
-  'Explain a time you had to work with a difficult stakeholder.',
-  'Walk me through a design/architecture decision you made.',
-  'What is your biggest strength as an engineer?',
-  'Describe a bug you fixed that other people missed.',
-  'How do you handle tight deadlines?',
-  'Explain a time you disagreed with your manager and what you did.',
-  'How do you ensure code quality and maintainability?',
-  'Tell me about a project you’re proud of and why.',
-  'Why do you want to join this company?',
-]
+function InterviewSessionContent() {
+  const router = useRouter();
 
-export default function InterviewSessionPage() {
-  const search = useSearchParams()
-  const router = useRouter()
+  const [phase, setPhase] = useState<"intro" | "run" | "result">("intro");
+  const [loading, setLoading] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [idx, setIdx] = useState(0);
 
-  const via = search.get('via')
-  const role = search.get('role')
-  const company = search.get('company')
-
-  // ===== Interview state =====
-  const questions = useMemo(() => QUESTION_BANK, [])
-  const [started, setStarted] = useState(false)
-  const [idx, setIdx] = useState(0)
-  const [answers, setAnswers] = useState<QA[]>(
-    questions.map((_, i) => ({ questionId: `q${i + 1}` }))
-  )
-  const isLast = idx === questions.length - 1
-  const currentQ = questions[idx]
-
-  // ===== Camera / Recording =====
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
-  const [recording, setRecording] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [permissionError, setPermissionError] = useState<string | null>(null)
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user') // front camera by default
-  const [elapsedSec, setElapsedSec] = useState(0)
-  const timerRef = useRef<number | null>(null)
-  const [showSavedToast, setShowSavedToast] = useState(false)
-
-  // Try supported MIME types
-  const getSupportedMimeType = () => {
-    const types = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-      'video/mp4;codecs=h264,aac',
-      'video/mp4',
-    ]
-    for (const t of types) {
-      if ((window as any).MediaRecorder?.isTypeSupported?.(t)) return t
-    }
-    return ''
-  }
-
-  // Init camera (front/back)
-  const initCamera = async () => {
-    setPermissionError(null)
-
-    // stop existing stream
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
-
-    const constraints: MediaStreamConstraints = {
-      video: {
-        facingMode: { ideal: facingMode },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-    }
-
+  async function handleStart() {
+    setLoading(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      if (!stream.getVideoTracks().length) throw new Error('No video track available.')
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play().catch(() => {})
-      }
-    } catch (err) {
-      console.error(err)
-      // fallback constraints
-      try {
-        const fallback = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        if (!fallback.getVideoTracks().length) throw new Error('No video track (fallback).')
-        streamRef.current = fallback
-        if (videoRef.current) {
-          videoRef.current.srcObject = fallback
-          await videoRef.current.play().catch(() => {})
-        }
-      } catch (err2) {
-        console.error(err2)
-        setPermissionError(
-          'Camera/Microphone not available. Use HTTPS (or localhost), allow permissions, and try again.'
-        )
-      }
-    }
-  }
-
-  const startTimer = () => {
-    setElapsedSec(0)
-    timerRef.current = window.setInterval(() => setElapsedSec((s) => s + 1), 1000)
-  }
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-  }
-
-  const startRecording = () => {
-    if (!streamRef.current) return
-    try {
-      chunksRef.current = []
-      const mimeType = getSupportedMimeType()
-      const rec = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined)
-      recorderRef.current = rec
-
-      rec.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data)
-      }
-      rec.onstop = async () => {
-        stopTimer()
-        setRecording(false)
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'video/webm' })
-        await saveBlob(blob)
-      }
-
-      rec.start()
-      setRecording(true)
-      startTimer()
+      const qs = await getRandomQuestions(10); 
+      if (!Array.isArray(qs) || qs.length === 0) throw new Error("No questions available.");
+      setQuestions(qs);
+      setAnswers({});
+      setIdx(0);
+      setPhase("run");
     } catch (e) {
-      console.error('Failed to start recording', e)
-    }
-  }
-
-  const stopRecording = () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop()
-    }
-  }
-
-  // ✅ Save WITHOUT downloading (SAVE_MODE='none')
-  const saveBlob = async (blob: Blob) => {
-    setSaving(true)
-    try {
-      const isContinuous = RECORD_MODE === 'continuous'
-      const targetIndex = isContinuous ? 0 : idx
-
-      const ext = (recorderRef.current?.mimeType || '').includes('mp4') ? 'mp4' : 'webm'
-      const baseName = isContinuous ? 'interview-session' : `answer-q${idx + 1}`
-      const fileName = `${baseName}-${Date.now()}.${ext}`
-
-      if (SAVE_MODE === 'none') {
-        // Keep in memory only (Blob URL) — no download/upload
-        const url = URL.createObjectURL(blob)
-        setAnswers((prev) => {
-          const copy = [...prev]
-          copy[targetIndex] = {
-            ...copy[targetIndex],
-            blobUrl: url,
-            fileName,
-            recorded: true,
-          }
-          return copy
-        })
-      } else if (SAVE_MODE === 'download') {
-        const url = URL.createObjectURL(blob)
-        setAnswers((prev) => {
-          const copy = [...prev]
-          copy[targetIndex] = {
-            ...copy[targetIndex],
-            fileName,
-            blobUrl: url,
-            uploaded: false,
-            recorded: true,
-          }
-          return copy
-        })
-        const a = document.createElement('a')
-        a.href = url
-        a.download = fileName
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-      } else {
-        // upload (requires /api/upload)
-        const fd = new FormData()
-        fd.append('file', blob, fileName)
-        fd.append('questionId', isContinuous ? 'all' : `q${idx + 1}`)
-        const res = await fetch('/api/upload', { method: 'POST', body: fd })
-        if (!res.ok) throw new Error('Upload failed')
-        const data = await res.json()
-        setAnswers((prev) => {
-          const copy = [...prev]
-          copy[targetIndex] = {
-            ...copy[targetIndex],
-            fileName: data.fileName || fileName,
-            uploaded: true,
-            uploadId: data.id || undefined,
-            recorded: true,
-          }
-          return copy
-        })
-      }
-
-      setShowSavedToast(true)
-      setTimeout(() => setShowSavedToast(false), 1600)
-
-      if (!isContinuous && AUTO_NEXT_AFTER_SAVE && !isLast) {
-        setIdx((i) => Math.min(i + 1, questions.length - 1))
-      }
-    } catch (e) {
-      console.error('Save failed', e)
-      alert('Failed to save recording. Please try again.')
+      alert(e instanceof Error ? e.message : "Failed to start interview");
     } finally {
-      setSaving(false)
+      setLoading(false);
     }
   }
 
-  const handleStartInterview = async () => {
-    await initCamera()
-    setStarted(true)
-    if (RECORD_MODE === 'continuous') {
-      startRecording()
-    }
+  function saveAnswer(qid: number, text: string) {
+    setAnswers((prev) => ({ ...prev, [qid]: text }));
   }
 
-  const finishInterview = () => {
-    if (RECORD_MODE === 'continuous' && recording) {
-      stopRecording()
-    }
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    setStarted(false)
-    // Navigate to summary (optional) or home
-    router.push('/')
+  function next() {
+    if (idx < questions.length - 1) setIdx(idx + 1);
+    else setPhase("result");
   }
 
-  const flipCamera = async () => {
-    setFacingMode((m) => (m === 'user' ? 'environment' : 'user'))
-    await initCamera()
+  function prev() {
+    if (idx > 0) setIdx(idx - 1);
   }
 
-  useEffect(() => {
-    return () => {
-      stopTimer()
-      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-        recorderRef.current.stop()
-      }
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-    }
-  }, [])
-
-  // ✅ Allow next if recorded (no need to have file saved)
-  const canGoNext =
-    RECORD_MODE === 'continuous'
-      ? true
-      : !!answers[idx]?.recorded || !!answers[idx]?.fileName || !!answers[idx]?.blobUrl
-
-  return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="bg-white border-b border-blue-50 px-6 py-4 shadow-sm flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Mock Interview – Session</h1>
-        <button onClick={() => router.push('/')} className="text-sm text-blue-600 hover:text-blue-700">Exit</button>
-      </header>
-
-      <main className="max-w-4xl mx-auto p-6">
-        {!started && (
-          <div className="bg-white border border-blue-50 rounded-2xl p-6 mb-6">
-            <div className="mb-3">
-              {via === 'resume' ? (
-                <p className="text-gray-700">Starting interview based on your uploaded resume…</p>
-              ) : (
-                <p className="text-gray-700">
-                  Starting interview for <span className="font-semibold">{role}</span> at{' '}
-                  <span className="font-semibold">{company}</span>.
-                </p>
-              )}
+  if (phase === "intro") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-white mb-4">Mock Interview — Session</h1>
+            <div className="text-slate-300 mb-8 space-y-2">
+              <p>This session picks <b>10 random questions</b> from the question bank.</p>
+              <p>Type your answers, click <b>Save & Next</b>. You can go back anytime.</p>
             </div>
-            <ul className="text-sm text-gray-600 mb-4 list-disc ml-5 space-y-1">
-              <li>This interview has {questions.length} questions.</li>
-              <li>We’ll use your camera & microphone. Use HTTPS or localhost.</li>
-              <li>If the preview is black, click <strong>Flip Camera</strong> after starting.</li>
-            </ul>
-            {permissionError && (
-              <p className="text-sm text-red-600 mb-4">{permissionError}</p>
-            )}
-            <div className="flex gap-2">
+            <button
+              onClick={handleStart}
+              disabled={loading}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {loading ? "Starting..." : "Start Interview"}
+            </button>
+            <div className="mt-6">
               <button
-                onClick={handleStartInterview}
-                className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                onClick={() => router.push("/")}
+                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
               >
-                Start Interview
+                Back to Dashboard
               </button>
             </div>
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
 
-        {started && (
-          <div className="space-y-6">
-            <div className="bg-white border border-blue-50 rounded-2xl p-6">
-              <div className="flex justify-between items-center mb-4">
-                <p className="text-sm text-gray-500">Question {idx + 1} / {questions.length}</p>
-                <div className="w-48 h-2 bg-blue-50 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-600 rounded-full transition-all"
-                    style={{ width: `${Math.round((idx / questions.length) * 100)}%` }}
-                  />
-                </div>
-              </div>
+  if (phase === "run" && questions.length > 0) {
+    const q = questions[idx];
+    return (
+      <div className="min-h-screen bg-slate-100 p-8">
+        <div className="max-w-3xl mx-auto space-y-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xl font-semibold text-slate-800">Question {idx + 1} of {questions.length}</h2>
+            <div className="text-slate-500 text-sm uppercase tracking-wide font-medium">{q.category} · {q.difficulty}</div>
+          </div>
 
-              <p className="text-gray-900 font-medium mb-4">{currentQ}</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Camera */}
-                <div className="relative">
-                  <div className="rounded-xl overflow-hidden border border-gray-200 bg-black">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-64 object-cover"
-                      style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : undefined }}
-                    />
-                  </div>
-
-                  {recording && (
-                    <div className="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
-                      ● Recording… {Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}
-                    </div>
-                  )}
-                </div>
-
-                {/* Controls & status */}
-                <div className="flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={flipCamera}
-                        className="flex-1 px-4 py-2 rounded-lg border hover:bg-gray-50"
-                        disabled={recording || saving}
-                        title="Toggle between front and back camera"
-                      >
-                        Flip Camera
-                      </button>
-
-                      {RECORD_MODE === 'continuous' ? (
-                        !recording ? (
-                          <button
-                            onClick={startRecording}
-                            className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                            disabled={!!permissionError || saving}
-                          >
-                            Start Recording
-                          </button>
-                        ) : (
-                          <button
-                            onClick={stopRecording}
-                            className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
-                            disabled={saving}
-                          >
-                            Stop & Save
-                          </button>
-                        )
-                      ) : (
-                        !recording ? (
-                          <button
-                            onClick={startRecording}
-                            className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                            disabled={!!permissionError || saving}
-                          >
-                            {answers[idx]?.recorded ? 'Re-record Answer' : 'Start Recording'}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={stopRecording}
-                            className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
-                            disabled={saving}
-                          >
-                            Stop & Save
-                          </button>
-                        )
-                      )}
-                    </div>
-
-                    <div className="text-sm text-gray-600">
-                      {RECORD_MODE === 'per-question' ? (
-                        answers[idx]?.recorded ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-green-600 font-medium">Recorded (not saved)</span>
-                            {SAVE_MODE !== 'none' && answers[idx].blobUrl && (
-                              <a
-                                className="text-blue-600 hover:underline"
-                                href={answers[idx].blobUrl}
-                                download={answers[idx].fileName}
-                              >
-                                Download again
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <span>Record your answer, then click <strong>Stop & Save</strong>.</span>
-                        )
-                      ) : (
-                        answers[0]?.recorded ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-green-600 font-medium">Session recorded (not saved)</span>
-                          </div>
-                        ) : (
-                          <span>{recording ? 'Recording in progress…' : 'Click Start Recording to begin the session.'}</span>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-4">
-                    <button
-                      onClick={() => setIdx((i) => Math.max(0, i - 1))}
-                      disabled={idx === 0}
-                      className={`px-4 py-2 text-sm rounded-lg border ${
-                        idx === 0 ? 'text-gray-400 border-gray-200' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      Previous
-                    </button>
-
-                    {!isLast ? (
-                      <button
-                        onClick={() => setIdx((i) => Math.min(questions.length - 1, i + 1))}
-                        disabled={!canGoNext}
-                        className={`px-4 py-2 text-sm rounded-lg font-semibold ${
-                          canGoNext ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        Next Question
-                      </button>
-                    ) : (
-                      <button
-                        onClick={finishInterview}
-                        disabled={RECORD_MODE === 'per-question' ? !answers[idx]?.recorded : recording}
-                        className={`px-4 py-2 text-sm rounded-lg font-semibold ${
-                          (RECORD_MODE === 'per-question' ? !!answers[idx]?.recorded : !recording)
-                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        Finish Interview
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {showSavedToast && (
-              <div className="fixed bottom-6 right-6">
-                <div className="bg-white border border-green-200 shadow-lg rounded-lg px-4 py-3 flex items-center gap-2">
-                  <span className="text-green-600 text-lg">✓</span>
-                  <span className="text-sm font-medium text-gray-800">Saved</span>
-                </div>
-              </div>
+          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+            <div className="font-bold text-lg mb-3 text-slate-900">{q.title}</div>
+            {q.description && (
+              <div className="text-slate-700 text-sm whitespace-pre-wrap leading-relaxed">{q.description}</div>
             )}
           </div>
-        )}
-      </main>
-    </div>
-  )
+
+          <textarea
+            className="w-full h-48 p-4 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-slate-800"
+            placeholder="Type your structured answer here..."
+            value={answers[q.id] || ""}
+            onChange={(e) => saveAnswer(q.id, e.target.value)}
+          />
+
+          <div className="flex items-center justify-between pt-2">
+            <button
+              onClick={prev}
+              disabled={idx === 0}
+              className="px-5 py-2 rounded-lg bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={next}
+              className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-500 shadow-md shadow-indigo-100 transition-all"
+            >
+              {idx < questions.length - 1 ? "Save & Next" : "Finish Interview"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "result") {
+    const answered = Object.keys(answers).length;
+    const total = questions.length;
+    const categories = new Map<string, number>();
+    questions.forEach((q) => {
+      const cat = q.category || "Uncategorized";
+      categories.set(cat, (categories.get(cat) || 0) + 1);
+    });
+
+    return (
+      <div className="min-h-screen bg-slate-100 p-8">
+        <div className="max-w-3xl mx-auto space-y-6">
+          <h2 className="text-3xl font-bold text-slate-900">Session Summary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Tile title="Answered" value={`${answered}/${total}`} />
+            <Tile title="Coverage" value={`${categories.size} Categories`} />
+            <Tile title="Next Step" value="Review responses" />
+          </div>
+
+          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+            <div className="font-bold text-slate-900 mb-3">Improvement Plan</div>
+            <ul className="list-disc list-inside text-sm text-slate-600 space-y-3 leading-relaxed">
+              <li>Review model answers for your weak responses.</li>
+              <li>Re-attempt 5 questions in your lowest-scoring category.</li>
+              <li>Capture notes and schedule a 20‑minute retro for tomorrow.</li>
+            </ul>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Link 
+              href="/" 
+              className="px-6 py-2 rounded-lg bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Back to Dashboard
+            </Link>
+            <button
+              onClick={() => { setPhase("intro"); setQuestions([]); setAnswers({}); setIdx(0); }}
+              className="px-6 py-2 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-500 transition-all"
+            >
+              Start Another Session
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// Main export with Suspense boundary
+export default function InterviewSession() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading session...</div>}>
+      <InterviewSessionContent />
+    </Suspense>
+  );
 }

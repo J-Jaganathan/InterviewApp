@@ -1,0 +1,1951 @@
+﻿===== RUN START: 2026-03-02 14:05:45 =====
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\.env | Size: 0.00 MB | Modified: 2026-03-02 06:05:39 =====
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=SQL@123PPa
+MYSQL_DATABASE=interview_app_database
+SECRET_KEY=supersecretkey
+FLASK_ENV=development
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\API_DOCUMENTATION.md | Size: 0.01 MB | Modified: 2026-03-02 06:05:39 =====
+# Interview App Backend API Documentation
+
+## Setup Instructions
+
+### 1. Create Virtual Environment
+
+```bash
+python -m venv venv
+```
+
+Activate (Windows):
+```bash
+venv\Scripts\activate
+```
+
+Activate (Mac/Linux):
+```bash
+source venv/bin/activate
+```
+
+### 2. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Configure Database
+
+Ensure MySQL is running and update `.env` file with your database credentials:
+
+```
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=SQL@123PPa
+MYSQL_DATABASE=interview_app_database
+SECRET_KEY=supersecretkey
+```
+
+### 4. Run the Application
+
+```bash
+python app.py
+```
+
+Backend runs at: `http://127.0.0.1:5000`
+
+---
+
+## API Endpoints
+
+### Authentication
+
+#### Register
+- **POST** `/api/auth/register`
+- Body:
+```json
+{
+  "username": "john_doe",
+  "email": "john@example.com",
+  "password": "password123",
+  "role": "user"
+}
+```
+
+#### Login
+- **POST** `/api/auth/login`
+- Body:
+```json
+{
+  "username": "john_doe",
+  "password": "password123"
+}
+```
+- Response includes JWT token
+
+#### Get Current User
+- **GET** `/api/auth/me`
+- Headers: `Authorization: Bearer <token>`
+
+#### Logout
+- **POST** `/api/auth/logout`
+- Headers: `Authorization: Bearer <token>`
+
+---
+
+### Candidates
+
+#### Get All Candidates
+- **GET** `/api/candidates`
+
+#### Get Candidate by ID
+- **GET** `/api/candidates/<id>`
+
+#### Create Candidate
+- **POST** `/api/candidates`
+- Headers: `Authorization: Bearer <token>`
+- Body:
+```json
+{
+  "name": "Jane Smith",
+  "email": "jane@example.com",
+  "phone": "+1234567890",
+  "status": "pending"
+}
+```
+
+#### Update Candidate
+- **PUT** `/api/candidates/<id>`
+- Headers: `Authorization: Bearer <token>`
+- Body: Same as create (partial fields allowed)
+
+#### Delete Candidate
+- **DELETE** `/api/candidates/<id>`
+- Headers: `Authorization: Bearer <token>`
+
+#### Search Candidates
+- **GET** `/api/candidates/search?q=<query>`
+
+---
+
+### Questions
+
+#### Get All Questions
+- **GET** `/api/questions`
+- Query params: `difficulty`, `category` (optional)
+
+#### Get Question by ID
+- **GET** `/api/questions/<id>`
+
+#### Create Question
+- **POST** `/api/questions`
+- Headers: `Authorization: Bearer <token>`
+- Body:
+```json
+{
+  "title": "Explain async/await",
+  "description": "Explain how async/await works in JavaScript",
+  "difficulty": "medium",
+  "category": "JavaScript"
+}
+```
+
+#### Update Question
+- **PUT** `/api/questions/<id>`
+- Headers: `Authorization: Bearer <token>`
+- Body: Same as create (partial fields allowed)
+
+#### Delete Question
+- **DELETE** `/api/questions/<id>`
+- Headers: `Authorization: Bearer <token>`
+
+---
+
+### Interviews
+
+#### Get All Interviews
+- **GET** `/api/interviews`
+- Query params: `candidate_id`, `status` (optional)
+
+#### Get Interview by ID
+- **GET** `/api/interviews/<id>`
+
+#### Get Interviews by Candidate
+- **GET** `/api/interviews/candidate/<candidate_id>`
+
+#### Create Interview
+- **POST** `/api/interviews`
+- Headers: `Authorization: Bearer <token>`
+- Body:
+```json
+{
+  "candidate_id": 1,
+  "question_id": 1,
+  "score": 85,
+  "feedback": "Good performance",
+  "status": "completed"
+}
+```
+
+#### Update Interview
+- **PUT** `/api/interviews/<id>`
+- Headers: `Authorization: Bearer <token>`
+- Body:
+```json
+{
+  "score": 90,
+  "feedback": "Excellent",
+  "status": "completed"
+}
+```
+
+#### Delete Interview
+- **DELETE** `/api/interviews/<id>`
+- Headers: `Authorization: Bearer <token>`
+
+---
+
+## Health Check
+
+- **GET** `/api/health`
+
+Returns:
+```json
+{
+  "status": "healthy",
+  "message": "Interview App Backend is running"
+}
+```
+
+---
+
+## Database Schema
+
+### Users Table
+- `id` (INT, Primary Key)
+- `username` (VARCHAR, Unique)
+- `email` (VARCHAR, Unique)
+- `password` (VARCHAR, Hashed)
+- `role` (VARCHAR)
+- `created_at` (TIMESTAMP)
+
+### Candidates Table
+- `id` (INT, Primary Key)
+- `name` (VARCHAR)
+- `email` (VARCHAR)
+- `phone` (VARCHAR)
+- `status` (VARCHAR)
+- `created_at` (TIMESTAMP)
+
+### Questions Table
+- `id` (INT, Primary Key)
+- `title` (VARCHAR)
+- `description` (TEXT)
+- `difficulty` (VARCHAR)
+- `category` (VARCHAR)
+- `created_at` (TIMESTAMP)
+
+### Interviews Table
+- `id` (INT, Primary Key)
+- `candidate_id` (INT, Foreign Key)
+- `question_id` (INT, Foreign Key)
+- `user_id` (INT, Foreign Key)
+- `score` (INT)
+- `feedback` (TEXT)
+- `status` (VARCHAR)
+- `created_at` (TIMESTAMP)
+- `updated_at` (TIMESTAMP)
+
+---
+
+## Authentication
+
+All protected endpoints require JWT token in Authorization header:
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+Tokens expire in 24 hours (86400 seconds).
+
+---
+
+## CORS Configuration
+
+Allowed origins:
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
+
+Allowed methods: GET, POST, PUT, DELETE, OPTIONS
+
+---
+
+## Error Handling
+
+All errors return JSON with appropriate HTTP status codes:
+
+- `400` - Bad Request
+- `401` - Unauthorized
+- `403` - Forbidden
+- `404` - Not Found
+- `409` - Conflict (e.g., duplicate username)
+- `500` - Internal Server Error
+
+---
+
+## Notes
+
+- Passwords are hashed using bcrypt
+- Database uses PyMySQL for MySQL connection
+- SQLAlchemy ORM for database operations
+- CORS enabled for Next.js frontend communication
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\app.py | Size: 0.00 MB | Modified: 2026-03-02 10:57:38 =====
+from flask import Flask, jsonify
+from flask_cors import CORS
+from config import config_by_name
+from models import db, User
+from routes_auth import auth_bp
+from routes_candidates import candidates_bp
+from routes_questions import questions_bp
+from routes_interviews import interviews_bp
+import os
+
+def create_app(config_name='development'):
+    """Application factory"""
+    app = Flask(__name__)
+    
+    # Load configuration
+    app.config.from_object(config_by_name.get(config_name, 'development'))
+    
+    # Initialize extensions
+    db.init_app(app)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
+    
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(candidates_bp)
+    app.register_blueprint(questions_bp)
+    app.register_blueprint(interviews_bp)
+    
+    # Error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'message': 'Endpoint not found'}), 404
+    
+    @app.errorhandler(500)
+    def internal_error(error):
+        db.session.rollback()
+        return jsonify({'message': 'Internal server error'}), 500
+    
+    # Health check endpoint
+    @app.route('/api/health', methods=['GET'])
+    def health_check():
+        return jsonify({
+            'status': 'healthy',
+            'message': 'Interview App Backend is running'
+        }), 200
+    
+    return app
+
+if __name__ == '__main__':
+    config_name = os.getenv('FLASK_ENV', 'development')
+    app = create_app(config_name)
+    app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False)
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\auth.py | Size: 0.00 MB | Modified: 2026-03-02 06:05:39 =====
+from datetime import datetime, timedelta
+import jwt
+from functools import wraps
+from flask import request, jsonify, current_app
+from models import User
+
+def generate_token(user_id, expires_in=86400):
+    """Generate JWT token"""
+    payload = {
+        'user_id': user_id,
+        'exp': datetime.utcnow() + timedelta(seconds=expires_in),
+        'iat': datetime.utcnow()
+    }
+    return jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+
+def verify_token(token):
+    """Verify JWT token"""
+    try:
+        payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+def token_required(f):
+    """Decorator to protect routes that require authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # Check for token in headers
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            try:
+                token = auth_header.split(" ")[1]
+            except IndexError:
+                return jsonify({'message': 'Invalid token format'}), 401
+        
+        if not token:
+            return jsonify({'message': 'Token is missing'}), 401
+        
+        payload = verify_token(token)
+        if not payload:
+            return jsonify({'message': 'Invalid or expired token'}), 401
+        
+        # Get user from database
+        user = User.query.get(payload['user_id'])
+        if not user:
+            return jsonify({'message': 'User not found'}), 401
+        
+        return f(user, *args, **kwargs)
+    
+    return decorated
+
+def role_required(role):
+    """Decorator to check user role"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(user, *args, **kwargs):
+            if user.role != role:
+                return jsonify({'message': 'Insufficient permissions'}), 403
+            return f(user, *args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\BACKEND_README.md | Size: 0.01 MB | Modified: 2026-03-02 06:05:39 =====
+# Flask Backend - Interview App
+
+A comprehensive Flask backend for the Interview Management Application.
+
+## ðŸ“‹ Features
+
+- **User Authentication** - Register, login, and JWT-based authentication
+- **Candidate Management** - Create, read, update, delete candidates
+- **Question Management** - Manage interview questions by difficulty and category
+- **Interview Tracking** - Track interview results and feedback
+- **CORS Support** - Enabled for Next.js frontend communication
+- **Database** - MySQL with SQLAlchemy ORM
+- **Security** - Password hashing with bcrypt, JWT tokens
+
+## ðŸ—‚ï¸ Project Structure
+
+```
+backend/
+â”œâ”€â”€ app.py                    # Main Flask application
+â”œâ”€â”€ config.py                 # Configuration settings
+â”œâ”€â”€ models.py                 # Database models
+â”œâ”€â”€ auth.py                   # Authentication logic
+â”œâ”€â”€ routes_auth.py            # Authentication routes
+â”œâ”€â”€ routes_candidates.py       # Candidate routes
+â”œâ”€â”€ routes_questions.py        # Question routes
+â”œâ”€â”€ routes_interviews.py       # Interview routes
+â”œâ”€â”€ utils.py                  # Helper functions
+â”œâ”€â”€ requirements.txt          # Python dependencies
+â”œâ”€â”€ .env                      # Environment variables
+â”œâ”€â”€ API_DOCUMENTATION.md      # API documentation
+â””â”€â”€ README.md                 # This file
+```
+
+## ðŸš€ Quick Start
+
+### 1. Prerequisites
+
+- Python 3.8+
+- MySQL Server running
+- pip (Python package manager)
+
+### 2. Installation
+
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Database Setup
+
+Update `.env` with your MySQL credentials:
+
+```
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=SQL@123PPa
+MYSQL_DATABASE=interview_app_database
+SECRET_KEY=supersecretkey
+FLASK_ENV=development
+```
+
+### 4. Run the Application
+
+```bash
+python app.py
+```
+
+Server will start at: `http://127.0.0.1:5000`
+
+## ðŸ”Œ Environment Variables
+
+Create a `.env` file in the backend directory:
+
+```env
+# Database Configuration
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=SQL@123PPa
+MYSQL_DATABASE=interview_app_database
+
+# Application
+SECRET_KEY=your_secret_key_here
+FLASK_ENV=development
+```
+
+## ðŸ“š API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login user
+- `GET /api/auth/me` - Get current user (requires auth)
+- `POST /api/auth/logout` - Logout user (requires auth)
+
+### Candidates
+- `GET /api/candidates` - Get all candidates
+- `GET /api/candidates/<id>` - Get specific candidate
+- `POST /api/candidates` - Create candidate (requires auth)
+- `PUT /api/candidates/<id>` - Update candidate (requires auth)
+- `DELETE /api/candidates/<id>` - Delete candidate (requires auth)
+- `GET /api/candidates/search?q=<query>` - Search candidates
+
+### Questions
+- `GET /api/questions` - Get all questions
+- `GET /api/questions/<id>` - Get specific question
+- `POST /api/questions` - Create question (requires auth)
+- `PUT /api/questions/<id>` - Update question (requires auth)
+- `DELETE /api/questions/<id>` - Delete question (requires auth)
+
+### Interviews
+- `GET /api/interviews` - Get all interviews
+- `GET /api/interviews/<id>` - Get specific interview
+- `GET /api/interviews/candidate/<candidate_id>` - Get candidate interviews
+- `POST /api/interviews` - Create interview (requires auth)
+- `PUT /api/interviews/<id>` - Update interview (requires auth)
+- `DELETE /api/interviews/<id>` - Delete interview (requires auth)
+
+### Health Check
+- `GET /api/health` - Health check endpoint
+
+## ðŸ” Authentication
+
+### Registration Example
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "email": "john@example.com",
+    "password": "password123"
+  }'
+```
+
+### Login Example
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "password": "password123"
+  }'
+```
+
+Response includes JWT token:
+
+```json
+{
+  "message": "Login successful",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+  "user": {
+    "id": 1,
+    "username": "john_doe",
+    "email": "john@example.com",
+    "role": "user"
+  }
+}
+```
+
+### Using Token in Requests
+
+Include the token in the Authorization header:
+
+```bash
+curl -X GET http://127.0.0.1:5000/api/candidates \
+  -H "Authorization: Bearer <your_token_here>"
+```
+
+## ðŸ—„ï¸ Database Models
+
+### User
+```python
+- id: Integer (Primary Key)
+- username: String (Unique)
+- email: String (Unique)
+- password: String (Hashed)
+- role: String (Default: 'user')
+- created_at: DateTime
+```
+
+### Candidate
+```python
+- id: Integer (Primary Key)
+- name: String
+- email: String
+- phone: String
+- status: String (Default: 'pending')
+- created_at: DateTime
+```
+
+### Question
+```python
+- id: Integer (Primary Key)
+- title: String
+- description: Text
+- difficulty: String (Default: 'medium')
+- category: String
+- created_at: DateTime
+```
+
+### Interview
+```python
+- id: Integer (Primary Key)
+- candidate_id: Integer (Foreign Key)
+- question_id: Integer (Foreign Key)
+- user_id: Integer (Foreign Key)
+- score: Integer
+- feedback: Text
+- status: String
+- created_at: DateTime
+- updated_at: DateTime
+```
+
+## ðŸ› ï¸ Development
+
+### Run in Debug Mode
+
+```bash
+FLASK_ENV=development python app.py
+```
+
+### Database Migrations
+
+For production, consider using Flask-Migrate:
+
+```bash
+pip install Flask-Migrate
+```
+
+Then initialize migrations:
+
+```bash
+flask db init
+flask db migrate
+flask db upgrade
+```
+
+## ðŸ“¦ Dependencies
+
+- `Flask` - Web framework
+- `Flask-CORS` - CORS support
+- `Flask-SQLAlchemy` - ORM
+- `PyMySQL` - MySQL driver
+- `python-dotenv` - Environment variables
+- `PyJWT` - JWT authentication
+- `bcrypt` - Password hashing
+
+## âš ï¸ Common Issues
+
+### Database Connection Error
+- Ensure MySQL is running
+- Verify credentials in `.env`
+- Check database exists
+
+### CORS Error
+- CORS is pre-configured for localhost:3000
+- Modify CORS settings in `app.py` for other origins
+
+### Port Already in Use
+- Change port in `app.py`: `app.run(port=5001)`
+
+## ðŸ”„ Integration with Next.js Frontend
+
+Frontend should use:
+
+```env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:5000
+```
+
+Example API call in Next.js:
+
+```typescript
+const response = await fetch(
+  `${process.env.NEXT_PUBLIC_API_URL}/api/candidates`
+);
+const data = await response.json();
+```
+
+## ðŸ§ª Testing
+
+Use tools like:
+- **Postman** - API testing
+- **Thunder Client** - VS Code extension
+- **cURL** - Command line testing
+
+## ðŸ“ Logging
+
+Add logging to `app.py`:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+## ðŸš€ Production Deployment
+
+- Use a production WSGI server (Gunicorn, uWSGI)
+- Enable HTTPS
+- Use environment-specific config
+- Set up database backups
+- Enable logging and monitoring
+
+Example with Gunicorn:
+
+```bash
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+```
+
+## ðŸ“„ License
+
+This project is part of the Interview App full-stack application.
+
+## ðŸ‘¨â€ðŸ’» Support
+
+For issues or questions, refer to the API documentation or check the main project README.
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\config.py | Size: 0.00 MB | Modified: 2026-03-02 08:32:45 =====
+import os
+from dotenv import load_dotenv
+from urllib.parse import quote
+
+load_dotenv()
+
+class Config:
+    """Base configuration"""
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+    
+    # MySQL Database Configuration
+    # URL-encode password to handle special characters like @
+    mysql_user = os.getenv('MYSQL_USER', 'root')
+    mysql_password = quote(os.getenv('MYSQL_PASSWORD', 'SQL@123PPa'), safe='')
+    mysql_host = os.getenv('MYSQL_HOST', '127.0.0.1')
+    mysql_port = os.getenv('MYSQL_PORT', '3306')
+    mysql_db = os.getenv('MYSQL_DATABASE', 'interview_app_database')
+    
+    SQLALCHEMY_DATABASE_URI = (
+        f"mysql+pymysql://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_db}"
+    )
+    
+    # JWT Configuration
+    JWT_SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
+    JWT_ALGORITHM = "HS256"
+
+class DevelopmentConfig(Config):
+    """Development configuration"""
+    DEBUG = True
+    TESTING = False
+
+class ProductionConfig(Config):
+    """Production configuration"""
+    DEBUG = False
+    TESTING = False
+
+class TestingConfig(Config):
+    """Testing configuration"""
+    DEBUG = True
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+
+config_by_name = {
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "testing": TestingConfig,
+    "default": DevelopmentConfig,
+}
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\ER Diagram.mwb | Size: 0.01 MB | Modified: 2026-03-01 15:31:12 =====
+PK   …[\}õÐ‚(  Óœ    document.mwb.xmlí}YsG–õ{ÿ
+¿ÏtLÒ¹/¶&rõ(F–Õ¢ÔÓóÄ(E
+6c‘Ävôÿ² ’"E,U…¢ˆÓ Äº¸•Ë=çfežûÓ}ô>å“io4üùÀãÿzñ—ŸºÙ,;ºœÌÎ.F“A6ûùÇ8êŽ:óA>œÍ®ÆùÏÇ¿^þíÕÑÿŽ&ÏóaçÃÑ¯£nÞ?¾kŒžÐã9:úéSÖŸçGËÛFç¿çÙñÑt6™wf`˜
+âÅÏ7VNÜõõº?ÿI­'”	F
+PÄÎk``à^2G¥Ñÿº5Öùw>NçƒŸá:¿PjáA5ú£Ë^'ëŸ\?ÑÂ©²ÑT*môÁc”T§!nµ#cHDlÀùÕÏÇ×Æ—¶—¾Ýzw6žMÎâ=ÅÈPA)äª¸sév¿7NwFÃYl pÿQn®ny$×Ë.'ÙàÚ—îòÛôøÇ­Ž©ä­#Ý^ñ“ùt6¸8`JL™úO3(šìä×lò1Ÿ\ÿú`ñ¥”ÿŠùUþÆ³8ZZXþaüýÞðòúO/Ž_üôãânÿ¼ß~Ü4¬~™Ì~»¾¾üÁÏÃèþ‹r#û§ó×#øîohbéš0¿Åyü©—~“
+‹9°týîµÛ&ÛÔÛ´	WÆ®¦wçãÂ—›‹‹kÓã•½·eškwp âž1	°
+PÆãŒ7Â†¼àÐ
+Ë<Y=ÏÙ…T¼‹ä­/e¼éžŸ®¦ôOlœAq’ÞDÈGÚb8”xLÀÄQ‚˜÷ÁªV{!qÖ%”ó›éymö«O;Ìøúvû(¯F—¡×Ï™Œæã¯AïöÒ¹¶%ôYÔ€7§±uÙµÓÅ—«îzP©ŸnÌ-ºIRpb7qHb7,Ñ†3'4¦au7ax®hãoÙÔBÀšãíh>ë
+ïuÎäÎ¥o:g‹G7çÑ}g*ùç]%ÿcãÂ#Óë¯Õ<A²	OWç“¼[àjqçO·ÿð.^¬ÖWJ7áÙÕp4¼º¡Óå·j-„›è«wÙyÿ¦QfÅçŠ>¸|ø{DÂk
+P\ïÁ
+*ÑÍ/²yf?d“¬3Ë'§ùìõ‚]Ìgò†QÞÚ¨ßÏ
+6óÕÔÙeÙFÖ?ëô6[]9–ÃN­ä?-hüÂÃ¼ø¼­…z·Þ
+Š ïþ6Ÿ¿€•¤3É³Y'ÏC¾¶õ¹‰ô°,ÑÝîI?›½<¼,åÍ·í°`¼¿
+ûWuaIWWÝóu·– ®ÅPê®ä¯¥(Ê]þZÆçY>ŸÅÉU®¡î÷ùrÌÔ¸sÔï¾^Eí¯ï[y±&aðAè%I
+`,³€ICDÌ½ã¦!ÂÀ(7a¯CôÈò= Ñ ö‚00*	ÞKÂP´ÜÂPŒ÷8„á[*Íêk{‹I,"H£P#P¶Èä}P4f‘”¹zRÇô’RŒ²¾l
+XÙ§Ë·£Ï¯òáåìÃÚx·	^¯]X*›»D&¦q¤+óÁð6z_¦+¢Z}muÑ31¹DÀz1JpŒ4
+ÄÞ„hå•[nÏ3)sŒ:kZÛ´Ù|6z9Œüc‰EhCûnîãüËx’O‹•Ô=¼Á•%õ‹$js7ovãÖÈél4É.ójÎÜèd·œ©Uï›lÑÓv4Œ×³o§ÅÃØT†{ÜcÞµ›¨{½ý—q¿×éÍÞd‹ÕÙ.3ƒ¿ÿ^wÝµñrúzÞï—P«ºNoŽ÷Ü¿èg—ÓµSpõƒ¿xÿúôå/¯½Ûæb­ÆèM_fË6@õ,ô¯Ã6¨yÞ2.Ô51íd¼JÜ¾-AˆSé´7÷óoiÇâbA9Ž_D^~š'ÝóÁôúóÍH?9ï]FÇVç	»“þ²YR¯[ÛÀmö°ÝFÝW¥Æ¦&ÜèX]pež2hLÌ`0Š¹æ(gÀY!5tÜËGW˜ÀõQÀU°®-W©¸&pÝ3pOóÉY[ÒÐaÁ,r„)ÐD3@%F@RB !VqÆ=¥H$˜m!Ì*”`¶0+QÊaÌîÌþ1Ï§Åümj+;,¸…*.spˆ$ „ #è¨°#B[hÊjÛ·Îï3Ü›5çôl>ìuFÝ|ý~ú üo?Œóa7þÝÿqôCox6žŒ.‹ñR|ŽúŸòîâÓÇÞx?þ{Cx}û£{‘+Y¸Làú´àšçƒ§†Öiôe>ÝUËÙ9°üÕ á5À9ä åZ… ÄR­%Œ Ÿ µ}€*‘Kùk
+<„û„†¦6¡ì-ÊîAþšÍŠÝŸ³`¶¬¥ÃZŒ6@ ´Š^iŽ4Áã a–xktH@ÛÂÌÕ˜´ÕöõûW¯šCZT¿û¬úŽ9'LhØ Æù¬7ÈÏ.ž<ó\,Ìœe³’Ï²¦ƒ1ÄšàA
+#"JXœÑÄ^éâ¸4‚	Û˜bš`±:,Ú÷oßú×ïÎÞ½üÕŸ¾Ó¿¾Ù‹ªF¤uÙ–adÓY6?=H.{6ƒ’åmí#L–=ôM7‡ÑÍ82O¯×nj™Ùx¦ypNw2ºÃÛ²µ¬Ÿ]ýO~õ¿“^q0·ÞI(îL'¡Âh’÷.‡Ñ™›w{¡Qw­/U+¸ÔS ¶¾ØQæ€RÜ­| ÎR§,^£©3yÑ‰¸»Kàyx o’_ä“âèdwyõÅŸy…ÄÀpê õÁ £4Êk1Xñ¯RagÚðÝ¤*\[Ó&/ÊíêÛò€õÐVzÍUÕîÛÙ@dˆç½~ovµÓŒs2ŸåoçÅ°úÔjç@º—Ãnþå†,>¿ø“Q…8…0 Ø›8ü)qdÅ9À¤uÞý«®Ý9³Ÿ
+#FŽ&Wµ‰F´°ÃÍÛ%ª´ÝÝiÚ€mšœJÐæ&ç×ÀbëMS#C’pÀ
+Q FÆ8M-‰‘SIg8Ò+ÒÈ4ý¶¿zþkÍñtobÍÇÅ’F¥‰õè¬íâãÙxzv³ÑlwæVÁ^S
+ •[)â¤ÐÀc¡ÕÐVœ¶€9CÁÁhNžZ4ÊÇcÊytÑ`@–8ìˆ²ªþì…æÉ¡µÔ¹´Ç‚Ö;g§ž-´"‡´u-ãÌÒxqÖËy‚Ö'€V)ÂA+XÐ`<€Zú—P ƒÖÂÀ¸£1‚ò­»@kq\ª)XÝjk§E‰U¯Í(m ³þ&>õ:y	õµÑe.m=r!@€æ…,pL!DœºÜiŒ4Ç,P¸ð»çHIÕéWï›¬9šôf»¼U¤©ö­
+Ú[úþö|¯<äE€Ä" j ŠQ’Z‚©Üã5‹cNà9élðlƒ]áÂàÎ¶àßÌßÈ	¦|ØÝÕ“
+¯—ÊbÚFˆˆA¿” Ïæ _&þ5ñ4ë–oKÍømÐà¦¸{¿à`ÿÓ+ÆF=pŒÿ3ýQçãiïŸù.t³°ñÛBZ»®'ŸzÓÞ"c©ÍŸcŒ|“M¦E¿}_Lnž¿/zvùbæÍÛ—¿ê·ÿWwçä›IoíÆy–³l'?æÃÞó¼ö†•r
+¡%zw»Rh‰¬Ï’F²¾:Ê¡ß1gÙ(Ú\æRG´Ÿ-3j›ZºËK¥ÅûÈe#¢ðß)reÞ ÏmdŠN+ ™
+€«(wVmSÜ[¦ØÀ*ÞS3ÅÂSLLq¦øòµóÿØ™'ÂÅõ¾ÔYŽ:L®¨îÔsJ\qÏ¹bÙ‘û(|±Ì…}ä‹Š»6òE„0—Ô{9cQø	r e±Hå¥˜j$…N|qoùbªžœ/î¾')ñÅÄ…/ÖÙt ë‹Ì%ÎØ2Îø]÷¡Ýã¥¡È+(‘ÃðV2¨‚Ž˜ýäX´‘7‡	†Û¶Œ³@Znåž[ád&Þ˜Ö‘7–™ñ;òÆ'‰RÜ,@AÛ6
+Y
+Á0”R¯¤³D¥I’’«–O’”\¥äªE‹ñ)Ãúšaá´*ßÆUùÓ¬Z‡’ïGÛZ&Ù—·£ÏÓºwç“Ëüå06Àlï‡Ûý½á0Ì¿ÌôR&åø¥×²2Î:—g¤«ÿg“Y¯9v4ß¦Ò²i—zç¿ßÜøâò‹Þpñé[/¿þËé‹M­tmÃ—#ŽÛ,¶¸þšîÃš=wml	5mL§ŸG“Íœ©ü©¹»GÆK´-Îõí¼áwýL²^×~˜w‰#·6¦;Ø¡&£Ïa4duãP¡ˆ<-"ÁÛ¼“õ;»Xy“O¦q
+n#}ë¤U
+§Y!ò&»,Ž‰ÀFæç5âÊªºch·i{×R3÷®½ÆÍ¢sA¬\o²‹	?¼,J¿x9Žœ©og1ûwôå4âQ©öXµÉÊ&ª\Oz——‘Ì];µüV0î¦§³ùy­Ño½ŠóoPóæw‘"Ž&[“œÍsaà´3ª20ëä$åò#b@°8Bü?ª14bnBÜ¤|^RÝËš9Ê¶Üt\õ:ùÙtï¦» ûÆ\ÇS¡—h$
+ `,³€ICÐ;njaz©<g·U‹Rù†\ÿå—{¯2/z
+gPId€wÅ†å±aÕ@Å±ã±YíµÊ8¥eÇÕž9ûtó›5ÞSþÚ…Ú@Ð
+î
+/¬êë`Æ‘
+9
+j{¦ØXââA¡v¡GÕÁDIóQt0™M:˜¥î_¹^,S†$©¹gu›(øxUKŒï.2M²"@¨aÑ+K5ÐÁ`p–ÂèåIdº}àÊ½JàÚRpå"k×=×’%ì·#lIC‡³b¤ÑÀq)#Ì
+¤3f7Æ‹a‚ÙöÁ¬R0Álu˜Ý“Z‚Šó„´	i÷©–àl4ËúE…ëó~>h ¢`5{‡ºÜÑÀ±& zgb‚«9ÐH! ¤Dú€)a	t[º%Ðm/è
+“@7î>îuÁæP·¢ÁÃ‚]%V–¸V€b¦‹7·O©ÃV8ÈSÝÂ6Â®f	v[»ÒÀ»	v÷/×]”+žŽ£Á³ÆòÝ*6|YÞ =2(T˜ˆÆ )ª½2T"hø¶p³”Æ	|«ƒïƒ¢ÁG¿½>zÿÆéwþh/
+kdSAá–Aé.vÈŸ-û4ðª¶Šµ}„ÑTT¸Bk¢¨°Çí+*Œ4óÎJë’@Æ@qn4Œ)ã,ÖZråC)ù“W>,µñ‘*Z+ž}åÃ€1Å —“eI;¥¼˜zI$áBh•*®®|¸3€m^s³©òá³©|8]pƒõK[l¼
+"÷m¨‚è©
+^	‘.2€ÅÙ2O&R½ jOkÛxÙJ­r¡96´*„‘q	É#ä H 
+ÇÜ7hí’œ^ãëeeñm›œ^©£˜û-§WjÆ'9½$§—ª nòã4ô¬J*åÍe1Z±TŠ¼—êä¦•õ²-Ã:²¤g1×ZÊÀØö„3ŒpbŠ{ËXÑ{j¦ØÀ¢XbŠ‰)îÀß¿~ù·÷þÉ•—çÔ_šzÈÑ!0F‹clc¬4|“âò^+.£8[ª¸,‰JŠË®¸¼ãâbR\NŠËIq9).oˆ’ârR\^™—ól——Œ>	-×ZÞÒ~Më+kä9Ãi¤F>`”F@yM!&+J_YúÐ}e#C’pÀ
+Q€:…€´˜Ý;Ã‘^‘¤¯ÜÂóºØ§#CÕí…Faé°n:a”ô•+¼®+E0¾ûyÜÀ8a˜h ™
+‘F¢bœÀ±EÎQ,é<nÏãÚ½.^PéHX‚[åÛsè3–01bâ§lRÌç'±èÍúyºeÌ4RË‰²F€@±´f`Ã-VKˆ4¶OÐØ4¾~ÿêUsðˆêÃcÀßaÊ›Ð¤È¿<y¾Xì^ôÆ[«œ—È
+Æ&¡ÅAœ	P-Ð2P`•À0h '	&[“Š&˜<(˜$¶=0‰ L8¹?Yd'†§ËÑäjwœ,ké°@ÒJå8‹)Å, H[`B x8pDH¶ð&|î ùo?äÙôê‡ÿ8úaw{óAñ)¶o÷‡?4ø¤:e™-CÏ|8<y–Ù»¸èuâ8l <ËÛ:,ø„š(BbRÉ=‰9&È©…RÀ2'Eœ¡\h™à³…ðitÊ1
+$QZŠmH.yÛ>,ÈNcÌof5¶¬¥CƒI'¡‘oxá• †)„3ê@™¶©²Ma2¨“‡“Ò‘“éee€ü›¦"4¥Ì4šPœ!‰^Iƒuqò™­¢kÖ¥¥,´=S­ÕV¾¥4éIu ÜËÚ2Ê¢T[¦m¨¸?µe–§•»gÙ¬·”¥mí#L¦º2"Xue4„]WæÇj)©Ú oC(8,
+Pg0Î"`0	LÆ‡b?EK¥Óm-•Rm¤LX	(—E-!C qŽ!`ðŠ%ÑÒÆiyY0Þ&ZZê$ü~‹––šñI´4‰–&yûM~¼}€ˆ={±Ò³C—·§iÌ
+žÈ T€Yì` Y¬÷SÞÞ¶²’±ŽH¦H$‰Œ**ªNj`ƒåHií¥LòöûËKÊÙo¦XjÆ'¦˜˜â£1Å—¯ÿÇ“«Û÷º_Î"×›.“ÏêÄ8PÚÈD¢m¡5ñc°H$^	À°ÒEÕ— ” "¶œ‚’:¤!ßÓ"I6´‘EjË­…Nx¤’ÔP !4ÀñàH°Æh‹Ü[YêÔÚ~³ÈR3>±ÈÄ"Ÿ‹¬w&éPydª®ÙRYr§šI©fÒ#ÕLÒ©fÒ¡×LÚñuª™”j&¥šI©fÒ ‘.ÕLJ5“VÕL
+N=“šI·Ä>MªW4i{6]5		BS8ï1 ˆx ƒf 3+	öJÇªj’6¼U“$'!HêfŽª#U‡?öÈaÄxªšÔÂoZËtà­ú·}8ß¦IHU“ÒÙ¹T5©Âû»RãûŸ&·ÈcÂ]¤Í”*<« ¸–†‰Èk°Hzdm×ª&ÜHRÕ¤¶abªšÔrhŒxe!(ÃÐÐa‚°ÂÎðíƒF£M‚ÆCÒ Ó8éY·
+SÕ¤CÉ¢æ®¥H‹R¤F0Ì)Ô[P‚ÉÂ$g	&	&ríI©L@¹?iä|Òß#K9,lT8p¬ytQ¨‰è…À9*¤Ð6ÄL2acWW	JØxPØhEª(˜ ±4¶§¢à~‚¤TA-( ¸òc¥8LI£ƒZ¨R&l#HÊ’’Ž%L Y$c˜Í'ü¬ø‹Ý‘²’¹[o…ÆhWÔBŠY ®Ø±£)ÖR¬0•’ —à²ÛaCÚ[÷²þƒ:ÕhÛÉTÿaÿ`2Õ¨Áš¨ÿ ÙžÕ0š¶¢þ†{ÎAžêL'`¾˜ÖXÅÅ^ê±iÊÛ¨ÇFƒeDY4¢Ð 
+0˜Q ’<ø ±vI­qZ^Œ·é±•:Ó·çõÊÌø¤Ç–ôØRý‡M~’ ÁIÈwçlàÐë?h©U"¢…67TP@Yï „DHëyl2º—LÑpÛÎJaÄXSˆö"ì"SŒ®À(=Ä\3*SÜ[¦XjÕ~3ÅR3>1ÅÄŸrïÍ‹»Tÿám¤&ÑÆ¶ÐÆƒø1X$“œ01ð¶Ðòô7õ—P;È¸£v?Y$¡­¬"f\</s  ´€aÍŠ*TØ@•Xäþ®7–Ùc¸ß,²ÔŒO,2±ÈgÅ"«n';L‰mZxl)ƒÜ:€SÍ‡½®ùÀ[[òA—J>zÉ‡Ý^R§’©äC*ùJ>lYÒQ<•|H%V&&Á=“’·Œ>•|¨Wòa{6]òA£Lp0ÆGn€6&§€,qØeÕa•|¢%˜À‚ãÔRÅ\
+`aÀZŠ…N!O%Z¨)Fq:ãVýŒÛ^”|>•|HÇåRÉ‡*¯ìÊŒï/J¦¬´š9 U°€šy¤Ö
+"<ÈDH%Zy€Ü©¤·r0%¬O%Ú†‰{¢µRüwX,cå°€1 Hƒux¬$ Az lÐ L°Š9gp&c³N¡0LªQ{€‘à$B¶GÀ˜²^2Ö¥Ì4R„</öU Zr`Œuñš2I!v’%hlaÎèE‚ÆƒÉL9c‚ÆZÐx³!íìC6ý°;DV2wXPY%aLSà¹€O¶¨pšH+¥HPÙF¨ôéÝeu`ÜO}Næ“>gË€2ésVFé=¡<@½,t=‚”VÂBN¥‘Z	“%˜l &~{}ôþÓïüÑ~B¨”	B„Ö®'8î6¡åmí#„&‰ë
+¬‰kCÕžI\k¥Û qm<å
+AP8BªBÆL
+9±<ì§äŒm”œqŠ‹¡D×†Q`’ ih¡d‘6‡$g§ìeÁx›äL©3û-9SjÆ'É™$9“$®7ùqHJ3\¢g¯4³s6pè×&¶ÁÂ$”¸ÁÐÄ„'6b‡TëÖöžº
+&mdŠ–	5¥€ø`b{³ 4¤Xƒœeš")ubŠ{ËKí;Þs¦XfÆ'¦˜˜â£1Å÷¯_þí½ruÂùgóØ´Ó³Ê{MòEt|1¨ÄÛÂ+Þ¤J¸×ª„¶V–ÐX˜d	\–pÇ…Å$K˜d	“,a’%Ü¦‡€“,a’%\••Pž‰,á‚Ï'IÂz’„›oÍ?¬»¼6N	×áý{/ÿ|»H”^¡ßôh[€6´•ÞM³ÜÊogX^|ÞÖNUY£Alm óŒ‘ª¬ñàU?pmUõŠÍ<)FñY6ŸÛÏ³é:1’Ý"˜„\p¤ †ãâ´&`
+ˆyœ¡ëÖfvˆ^õ#W=³ò­·ââªKk†aLÔ¬l tFwóÉ«ØÄ7„øöÂ7Ós½'Œ6Dê°Óç¼CBÊ{bv=Rý5
+¯ØžÿíKÄÃÍ6àÂÊ4ŸÊ}lÕˆ®n©›wd3–:cÉ`3¦>Œòéã¨''Í˜*Ppˆ´…›±5ýœ‹f,eÓN¯×Œ©ùï½iC×˜¥ùù$ÿÜŒ­YoÊqCƒ=Ÿw>NšîófL]ž#		lÊ&¨¡ñ~9ÉóME,„Ycø±ÁØÀššÑƒbN7Lîß¥Î7:œ74yò«óÆüdNÞ˜©Éh
+›CiÜàH
+NEÔ -Þ ­†žñ¼7ÌŠ2Ã„›|4ucnŠàÆÀì÷ñ`Ú\ÀY,]4dñÆL­j¯*iQw•Èþk,ü¬w§ôjÏ*eÎ8v>äƒì¾åëk/þÔ†” Ü†˜­sHb¶n °DÎœÐ˜®zo¸!Y³»V~;êç·¯íúN\•ÚÕ¹´±<O4—ÐY M±!
+¤RP¬B"HB×(’NG0ñqÙ5$
+Å%Å
+ÏÞùÐëwß.àÇ
+ìXŽ¤øÁ7“Þ§^?¿Ì¿¾f^~_µÙ¶twÜ±ºè¤}Ð(@…0€j€’R-¼7”kèÉt¢:Ý²nÅJ17«6Ë5«å„úë_OþZï@æ=cË7Œ§ö¿ý¯ºÆË“Øm––?ù½±?Ö¹ýB¿zÕô£­{`kï}-5i×½©õá1—¦+.EG0Büñ–¢¿ûÒó¢SÓJs¹•æ²kÊÕ[aŒF8H}œIe‹}ñÎ"‹´E˜ëÆ€°X«xZ Ü±rÃ÷B—ú€„E=Y¥ã F–§°ŒÏ„ô¢]@øN›W¾JûØ8xê_yû®=PXjÚ.J‹
+ï¾Nb{tGÑNÂÄ'ÇDb=ö¦H=Dl,†yl,K'JÃ¤r¾9Lê©1qG¹Íï‡‰Òqï‚°€yã
+mt´ƒhKqžÀ€üsÁD)È“câšû^¾>õokÜ÷îíË_~ño[ÂeâÄç£V÷ç’?5§‘F.¬ŠEÐ‚2ÀŒÄÈªH aƒë³>-Kn[ÁACl! , õ^EŽ8L	b”Ï&-µæùAðº’ÂÕê÷¹ø€ïÛ3È/—òåáåÝÑPï"eÝOùR{J5 "Yf8¨P”;Žes+Ñœ=õ+Ù¶dÝ–e¹„Àà8t©áªXeäÀ&=,Ž	Ö.ÈûÛûw/_×Í»õcƒ¾ÿ‡·ïÛŠ¥fî!/FËÅÉh>ë
+ó“üKÞ™ÏÒY †q±Ò©†ÍN ±AÆþæbýS.wÄî‡Wqî¶kïÖÚtõûÍ™‹C°74g¯9Kç½ËæŒ]ôGYS¶b,ì7dª;šGŠÝ”±¼Ó4æÚºZ€5L
+´µ¡JaÏš5×ÄÞè»OÚ¨½"Íò/MÍ‚M-cPƒû£áe“[î¼?:oj”4gjÙr
+,Z®As¿OGÃ¦¢[¤{EÙ˜†Í­.@SÓ`cãmÐ¤©Æñ*o,RÞ jÚ^c{™ù¬±è;5Gfâù’e7æ\ÿê²±™zÓrEÁ³ei ¦¢Ý¼?ë5Ùƒ·æµ›M6éy¯1V=õó¬)¿òá|ÐT^“Ïv;Œ9¤;eƒï§ùä›\p~çRyÝ…àvöãÎïO7œ¡Z·´ð÷B.ot£Ê®0×H\°PËm±k¶I
+B`¹1hõ
+¥È²ŒæÝ›æøtmvÃBö×µ–óy/&ÿ‘KkªÎ­[¦É~Mnn••îì
+¿Þ	«Ü9Éã¼˜æ7÷RZåæB`p>-õ‹+–”®{kõ½µë­!U:o·i]hÛC_Ÿ¨«tç¦Õ¤ú§f âž1	°
+PÆFxÀZa™¨ÿÀ2ò^fÙRs½3}ž^ŒF³uvVÊ¹ì(,s9˜Ø[gxw/Îlpƒíðfèóhòñ<v>œŒ?\M{¬âzÙå$Ü¼ŽX~»¿ê¶=äm²»…¶µb”4XŒRXk'BxaÖlYÅw0%´\ÐëôGÓõÅt7È‰Ù$"«Ú›»vãŠmÙ&½ûËÓˆÄÂ`	ža¨0
+b›k…W·ª:ÏòóŽÂÛ^ÄÝŸIÙuÉ‚‹gãéÙóÈÛÖÅÍ–ŠU»ûvþñÛÅÅF)Ø-÷ÿ_¥û+Ê®ûí|Øµ;ºÿÕÄO™M2›m«!±Ö‡;·×;F¶?J‰#ßjig¾¹ÔS ŽáƒJì€ŠÐ´ò8K²xýk¼5Ï0èu»ýü4¿,ÆCñù¬NSD2™íÚžwTw
+jL²Ï§ã~o¶S_,#Zè]Î'ù×Q{ýýÅŸˆJ‚ÑÀ	M"d#	Tp‰‚ÐpÂÖ«v×ùñEËÜþ¼åÂ;%40Ð³‚O# • j¤™¢X·óÏß‡Å®R
+ÆJ
+ÁJ•\j¾4/ó¶°6öXÌHÖ€˜ÁÄ1é,PÆF~K©…PC±y<ì)³„;	w¾îp+£ZaÄC
+ÐN[Àœ!„à`4'	w¾îÁ"Ì Áß˜‚ïb ˆ' ¢˜D2?+–pç°q'öq1ñÁØÒ ¡²€@¬
+’Hûh¸3]Õ"ú$ôùnèC‹wÆ†8ÔIŒyÇ˜Ç¹Ð0¦Œ³XkÐç "3C9ðÅÑ š0
+\±&¨)UÖÂ„>ë6ûW{/P”ô6…™õK‰ÜÑ]—ï‚‹Å—†–ºæ7æo¶Ïo'5«·ÏŸ#šw:çÇ¥;ýºú±ÿ2Î†Ýb™Uè_Cã+•ÃEoØíuò],Ä&d“Þ?s×›ŽûÙÕÚ7leA`Ñ1wµæ‹oA*F}Ó˜xH”õ±§|PÔ†8Ô„¬:ïnêU~öo˜D#ÃÿSÒ§«6^^µÿï Å‡Øýb˜Çˆîè_eW·/zû‹Ï/þ"kÒ‡ê‘À0i@$F}Jc¸•Ñ¶Ÿ_DIåÁ^”Á¬5:ÙpžõO{ÿ\œ×¨É³Ñ8ö
+©~ãç^·(Ž
+áÜÝ:§UH4.DScD9›.kÉM¿Cbô0’—")’?E$7œA%‘Þ(ác5Aqì¸ãÆúçÉ‘B-‹ä˜òçÊésåË5ž§‰àeÞ«¥þ\#Ï¡N >˜8\5Êk1Xñl¹8‰‹?j '”ÕàèYð›]IOÁ¡§
+¼Å*†	'€r)õ9‰HŠàO³š"ULYà¼/T ˆô[3€™•{%„ci5%qð=á\<«ù÷h>‰!åIBx©×<)„?EgÐ¨"9`Œ#@97@ÃÈWŒf«Ò2J"áÁ…¨Á}V|qn®Ù÷³«†<‘ðD±ªG=¼Ýõýìƒ‰ò@Zm[yÿöèºG+¹/ƒh•šÓhüàQ…Áõkñÿ&ÎeÕÆáë&] p©˜³QÑNFÏo+±fKÃU´–‘¼²ÒÒö-›¥„á»lX}4¸ñÍïViþÐÁ‹rÉz%‹;lª>d¨ØuÈü2ÍÇ×#æ²ø<Ý"W1oc °òCŒšÞÓùù«•ñ{€÷š(ÉëêÕ=	¨KjíÍª
+ÔÄíÚ×÷Oók9Œ`ýµæãBSÆl&5{|Ým_ªþÎUÕþ9
+V÷ëÃ³ÐåY/ñæëë[„ÿqÝ9ó
+:f‡Š3¿Lf§³˜w£/7`8ŒïŸ®.‘.Žk¿-”2nÈÄâójÇÓ7<œÞM2qA2nFôâK¹ƒãDª•ÚØÓ«açÍdtÑûF x“¾ß©îMÊYviã,»MzyÕSçwl-ß¹•1ªÈ9Šz'Vr`4À#(”U(¡VóÆ.ä]ÙÇÕX¼™OñšéÑÛy?oV>¢&û.=‡Wªyî²q5Ÿe'ï²Ë¯ÝZmÆ­Â·Î|2‰?ts±&ÐmP‹7Ôâ7LiÍvÅ©_³ÉÇ[R2X|);«5-™V†ìúc×zB™`€ay5bHWì[…{É\$ÇßvÓ½¿ÿe}÷á’ºÆÛ#I6Ÿ¸Qg^‡x9¼]c×ŽK mÌ
+¨s¯5 iG‘ñŽ­‘|??Ï„„çòv}5Ú¼}Öµ‘ÍgŠäÇ|ào…wJRz>Zäò¥o-(ÎRÏ9R11Ââñÿ¤°š•…Fõ+¨‚•
+)ôú»Æ“Ñ2û*¤iŽFG³ùÑõÅÒFn••ÐIy—ó&‚ç8ŸÌz^W|¿ù³jÂlío²Ëü4ŸÍâÓLoJº"8&æãhgÅr "
+pâ‘ÓÖ¢˜É®‘©êv„PBÜôÈ]Û+›ñîQ¤lrÙšÑl¶à¥ôäÁ‹½Íw¾Zd’ü„°J·½]f¯•ï{W¤Ûîº/š™Íð†G“Ù$ëÍª•e—Åqöî«8ÚøöûRúùüdq}¡é–Ño¢ìº#X¬HöXÅ‘¿‡ã}³—·ú±Ð½{ñ—ÿPK     N[\€*
+         lock11432PK   N[\ynëð]        @db/data.dbí”ÏOÂ0ÇÛ
+%Y²3!\ÞŒ†•“sÙÁˆÆ¢pZ
++qÉ~àZ¯&þy^ýO¼ypÃ€?ÏÚO^¼~ûš¦íëpÐõ8…Y„Ã* ŒÑ) BHBÛà¼lú¿B•ß$1$1ù	þ;×¸XªTðÓ'ŸŽúNßêy#–©Û&ØúY×„|T¥^ûÆc…À4¦„S&Ðc4¼ò'ÃEú[Íæq6ÛÈ§¸IÝf»¡µ©Z»sxÒÑŽT¥ª*qçÑ{'$MÛÙûkeNb8~²þge9taÍ–âÒ™“Å}Q¢9ÿA™FA@CþÍj}ëüR·ÆpaŽácÃ[^ÕT¥V—vKz#/té’ÝúÉ8dÁ£ÌwòÃt´¼#'wQPÓD–_PbàOPÅÅ22’N@§1£>rØƒY+IÉòÿ%&þŠ\Æ«ôÇïPK?   …[\}õÐ‚(  Óœ            ¶    document.mwb.xmlPK?     N[\€*
+                 ¶C(  lockPK?   N[\ynëð]                ¶j(  @db/data.dbPK      ©   ð)  N MySQL Workbench Model archive 1.0
+model-schemas: mydb, interview_app_database
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\models.py | Size: 0.00 MB | Modified: 2026-03-02 09:24:20 =====
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import bcrypt
+
+db = SQLAlchemy()
+
+class User(db.Model):
+    """User model for authentication"""
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(320), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def set_password(self, password):
+        """Hash password using bcrypt"""
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    def check_password(self, password):
+        """Check password against hash"""
+        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+                        'name': self.name,
+            'email': self.email,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class Candidate(db.Model):
+    """Candidate model"""
+    __tablename__ = 'candidates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255))
+    phone = db.Column(db.String(50))
+    status = db.Column(db.String(50), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'phone': self.phone,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class Question(db.Model):
+    """Interview question model"""
+    __tablename__ = 'questions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    difficulty = db.Column(db.String(50), default='medium')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'difficulty': self.difficulty,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class Interview(db.Model):
+    """Interview result model"""
+    __tablename__ = 'interviews'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    candidate_id = db.Column(db.Integer, db.ForeignKey('candidates.id'), nullable=False)
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False)
+    score = db.Column(db.Integer)
+    feedback = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'candidate_id': self.candidate_id,
+            'question_id': self.question_id,
+            'score': self.score,
+            'feedback': self.feedback,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\requirements.txt | Size: 0.00 MB | Modified: 2026-03-02 08:26:04 =====
+Flask==2.3.3
+Flask-CORS==4.0.0
+Flask-SQLAlchemy==3.0.5
+PyMySQL==1.1.0
+python-dotenv==1.0.0
+Werkzeug==2.3.7
+PyJWT>=2.8,<2.12
+bcrypt==4.0.1
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\routes_auth.py | Size: 0.00 MB | Modified: 2026-03-02 11:06:24 =====
+from flask import Blueprint, request, jsonify
+from models import db, User
+from auth import generate_token, token_required
+import re
+
+auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+
+def validate_email(email):
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validate_password(password):
+    """Validate password strength"""
+    return len(password) >= 6
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    """Register new user"""
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Missing required fields'}), 400
+    
+    if not data.get('name'):
+        return jsonify({'message': 'Missing required fields'}), 400
+    
+    # Validate email
+    if not validate_email(data['email']):
+        return jsonify({'message': 'Invalid email format'}), 400
+    
+    # Validate password
+    if not validate_password(data['password']):
+        return jsonify({'message': 'Password must be at least 6 characters'}), 400
+    
+    # Check if user already exists
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'message': 'Email already exists'}), 409
+    
+    # Create new user
+    try:
+        user = User(
+            name=data['name'],
+            email=data['email']
+        )
+        user.set_password(data['password'])
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({
+            'message': 'User created successfully',
+            'user': user.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Registration failed: {str(e)}'}), 500
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """Login user"""
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Missing email or password'}), 400
+    
+    user = User.query.filter_by(email=data['email']).first()
+    
+    if not user or not user.check_password(data['password']):
+        return jsonify({'message': 'Invalid email or password'}), 401
+    
+    token = generate_token(user.id)
+    
+    return jsonify({
+        'message': 'Login successful',
+        'token': token,
+        'user': user.to_dict()
+    }), 200
+
+@auth_bp.route('/me', methods=['GET'])
+@token_required
+def get_current_user(user):
+    """Get current user info"""
+    return jsonify({
+        'user': user.to_dict()
+    }), 200
+
+@auth_bp.route('/logout', methods=['POST'])
+@token_required
+def logout(user):
+    """Logout user (token-based, no action needed on backend)"""
+    return jsonify({
+        'message': 'Logged out successfully'
+    }), 200
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\routes_candidates.py | Size: 0.00 MB | Modified: 2026-03-02 06:05:39 =====
+from flask import Blueprint, request, jsonify
+from models import db, Candidate
+from auth import token_required
+
+candidates_bp = Blueprint('candidates', __name__, url_prefix='/api/candidates')
+
+@candidates_bp.route('', methods=['GET'])
+def get_all_candidates():
+    """Get all candidates"""
+    candidates = Candidate.query.all()
+    return jsonify({
+        'candidates': [candidate.to_dict() for candidate in candidates],
+        'total': len(candidates)
+    }), 200
+
+@candidates_bp.route('/<int:candidate_id>', methods=['GET'])
+def get_candidate(candidate_id):
+    """Get candidate by ID"""
+    candidate = Candidate.query.get(candidate_id)
+    
+    if not candidate:
+        return jsonify({'message': 'Candidate not found'}), 404
+    
+    return jsonify({
+        'candidate': candidate.to_dict()
+    }), 200
+
+@candidates_bp.route('', methods=['POST'])
+@token_required
+def create_candidate(user):
+    """Create new candidate"""
+    data = request.get_json()
+    
+    if not data or not data.get('name'):
+        return jsonify({'message': 'Name is required'}), 400
+    
+    candidate = Candidate(
+        name=data['name'],
+        email=data.get('email'),
+        phone=data.get('phone'),
+        status=data.get('status', 'pending')
+    )
+    
+    db.session.add(candidate)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Candidate created successfully',
+        'candidate': candidate.to_dict()
+    }), 201
+
+@candidates_bp.route('/<int:candidate_id>', methods=['PUT'])
+@token_required
+def update_candidate(user, candidate_id):
+    """Update candidate"""
+    candidate = Candidate.query.get(candidate_id)
+    
+    if not candidate:
+        return jsonify({'message': 'Candidate not found'}), 404
+    
+    data = request.get_json()
+    
+    if 'name' in data:
+        candidate.name = data['name']
+    if 'email' in data:
+        candidate.email = data['email']
+    if 'phone' in data:
+        candidate.phone = data['phone']
+    if 'status' in data:
+        candidate.status = data['status']
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Candidate updated successfully',
+        'candidate': candidate.to_dict()
+    }), 200
+
+@candidates_bp.route('/<int:candidate_id>', methods=['DELETE'])
+@token_required
+def delete_candidate(user, candidate_id):
+    """Delete candidate"""
+    candidate = Candidate.query.get(candidate_id)
+    
+    if not candidate:
+        return jsonify({'message': 'Candidate not found'}), 404
+    
+    db.session.delete(candidate)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Candidate deleted successfully'
+    }), 200
+
+@candidates_bp.route('/search', methods=['GET'])
+def search_candidates():
+    """Search candidates by name or email"""
+    query = request.args.get('q', '').lower()
+    
+    if not query:
+        return jsonify({'message': 'Search query is required'}), 400
+    
+    candidates = Candidate.query.filter(
+        (Candidate.name.ilike(f'%{query}%')) |
+        (Candidate.email.ilike(f'%{query}%'))
+    ).all()
+    
+    return jsonify({
+        'candidates': [candidate.to_dict() for candidate in candidates],
+        'total': len(candidates)
+    }), 200
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\routes_dashboard.py | Size: 0.00 MB | Modified: 2026-03-02 10:57:38 =====
+from flask import Blueprint, jsonify
+from auth import token_required
+from models import User, db
+
+dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api')
+
+@dashboard_bp.route('/dashboard', methods=['GET'])
+@token_required
+def get_dashboard(user):
+    """Get user dashboard with progress stats"""
+    # Count solved problems for this user
+    from models import PracticeSession
+    solved_count = db.session.query(PracticeSession).filter_by(
+        user_id=user.id,
+        status='solved'
+    ).count()
+    
+    # Total questions available
+    from models import Question
+    total_questions = db.session.query(Question).count()
+    
+    return jsonify({
+        'user': user.to_dict(),
+        'solvedProblems': solved_count,
+        'totalProblems': total_questions,
+        'progress': round((solved_count / total_questions * 100) if total_questions > 0 else 0, 1),
+        'sessionsCompleted': solved_count,
+        'avgScore': 0
+    }), 200
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\routes_interviews.py | Size: 0.00 MB | Modified: 2026-03-02 08:40:04 =====
+from flask import Blueprint, request, jsonify
+from models import db, Interview, Candidate, Question
+from auth import token_required
+
+interviews_bp = Blueprint('interviews', __name__, url_prefix='/api/interviews')
+
+@interviews_bp.route('', methods=['GET'])
+def get_all_interviews():
+    """Get all interviews"""
+    candidate_id = request.args.get('candidate_id', type=int)
+    
+    query = Interview.query
+    
+    if candidate_id:
+        query = query.filter_by(candidate_id=candidate_id)
+    
+    interviews = query.all()
+    
+    return jsonify({
+        'interviews': [interview.to_dict() for interview in interviews],
+        'total': len(interviews)
+    }), 200
+
+@interviews_bp.route('/<int:interview_id>', methods=['GET'])
+def get_interview(interview_id):
+    """Get interview by ID"""
+    interview = Interview.query.get(interview_id)
+    
+    if not interview:
+        return jsonify({'message': 'Interview not found'}), 404
+    
+    interview_data = interview.to_dict()
+    
+    # Get related data
+    candidate = Candidate.query.get(interview.candidate_id)
+    question = Question.query.get(interview.question_id)
+    
+    if candidate:
+        interview_data['candidate'] = candidate.to_dict()
+    if question:
+        interview_data['question'] = question.to_dict()
+    
+    return jsonify({
+        'interview': interview_data
+    }), 200
+
+@interviews_bp.route('', methods=['POST'])
+@token_required
+def create_interview(user):
+    """Create new interview"""
+    data = request.get_json()
+    
+    if not data or not data.get('candidate_id') or not data.get('question_id'):
+        return jsonify({'message': 'candidate_id and question_id are required'}), 400
+    
+    # Verify candidate and question exist
+    candidate = Candidate.query.get(data['candidate_id'])
+    question = Question.query.get(data['question_id'])
+    
+    if not candidate or not question:
+        return jsonify({'message': 'Candidate or question not found'}), 404
+    
+    interview = Interview(
+        candidate_id=data['candidate_id'],
+        question_id=data['question_id'],
+        score=data.get('score'),
+        feedback=data.get('feedback')
+    )
+    
+    db.session.add(interview)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Interview created successfully',
+        'interview': interview.to_dict()
+    }), 201
+
+@interviews_bp.route('/<int:interview_id>', methods=['PUT'])
+@token_required
+def update_interview(user, interview_id):
+    """Update interview"""
+    interview = Interview.query.get(interview_id)
+    
+    if not interview:
+        return jsonify({'message': 'Interview not found'}), 404
+    
+    data = request.get_json()
+    
+    if 'score' in data:
+        interview.score = data['score']
+    if 'feedback' in data:
+        interview.feedback = data['feedback']
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Interview updated successfully',
+        'interview': interview.to_dict()
+    }), 200
+
+@interviews_bp.route('/<int:interview_id>', methods=['DELETE'])
+@token_required
+def delete_interview(user, interview_id):
+    """Delete interview"""
+    interview = Interview.query.get(interview_id)
+    
+    if not interview:
+        return jsonify({'message': 'Interview not found'}), 404
+    
+    db.session.delete(interview)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Interview deleted successfully'
+    }), 200
+
+@interviews_bp.route('/candidate/<int:candidate_id>', methods=['GET'])
+def get_candidate_interviews(candidate_id):
+    """Get all interviews for a candidate"""
+    interviews = Interview.query.filter_by(candidate_id=candidate_id).all()
+    
+    if not interviews:
+        return jsonify({
+            'interviews': [],
+            'total': 0
+        }), 200
+    
+    interviews_data = []
+    for interview in interviews:
+        interview_dict = interview.to_dict()
+        candidate = Candidate.query.get(interview.candidate_id)
+        question = Question.query.get(interview.question_id)
+        if candidate:
+            interview_dict['candidate'] = candidate.to_dict()
+        if question:
+            interview_dict['question'] = question.to_dict()
+        interviews_data.append(interview_dict)
+    
+    return jsonify({
+        'interviews': interviews_data,
+        'total': len(interviews_data)
+    }), 200
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\routes_questions.py | Size: 0.00 MB | Modified: 2026-03-02 06:05:39 =====
+from flask import Blueprint, request, jsonify
+from models import db, Question
+from auth import token_required
+
+questions_bp = Blueprint('questions', __name__, url_prefix='/api/questions')
+
+@questions_bp.route('', methods=['GET'])
+def get_all_questions():
+    """Get all questions"""
+    difficulty = request.args.get('difficulty')
+    category = request.args.get('category')
+    
+    query = Question.query
+    
+    if difficulty:
+        query = query.filter_by(difficulty=difficulty)
+    if category:
+        query = query.filter_by(category=category)
+    
+    questions = query.all()
+    
+    return jsonify({
+        'questions': [question.to_dict() for question in questions],
+        'total': len(questions)
+    }), 200
+
+@questions_bp.route('/<int:question_id>', methods=['GET'])
+def get_question(question_id):
+    """Get question by ID"""
+    question = Question.query.get(question_id)
+    
+    if not question:
+        return jsonify({'message': 'Question not found'}), 404
+    
+    return jsonify({
+        'question': question.to_dict()
+    }), 200
+
+@questions_bp.route('', methods=['POST'])
+@token_required
+def create_question(user):
+    """Create new question"""
+    data = request.get_json()
+    
+    if not data or not data.get('title'):
+        return jsonify({'message': 'Title is required'}), 400
+    
+    question = Question(
+        title=data['title'],
+        description=data.get('description'),
+        difficulty=data.get('difficulty', 'medium'),
+        category=data.get('category')
+    )
+    
+    db.session.add(question)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Question created successfully',
+        'question': question.to_dict()
+    }), 201
+
+@questions_bp.route('/<int:question_id>', methods=['PUT'])
+@token_required
+def update_question(user, question_id):
+    """Update question"""
+    question = Question.query.get(question_id)
+    
+    if not question:
+        return jsonify({'message': 'Question not found'}), 404
+    
+    data = request.get_json()
+    
+    if 'title' in data:
+        question.title = data['title']
+    if 'description' in data:
+        question.description = data['description']
+    if 'difficulty' in data:
+        question.difficulty = data['difficulty']
+    if 'category' in data:
+        question.category = data['category']
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Question updated successfully',
+        'question': question.to_dict()
+    }), 200
+
+@questions_bp.route('/<int:question_id>', methods=['DELETE'])
+@token_required
+def delete_question(user, question_id):
+    """Delete question"""
+    question = Question.query.get(question_id)
+    
+    if not question:
+        return jsonify({'message': 'Question not found'}), 404
+    
+    db.session.delete(question)
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Question deleted successfully'
+    }), 200
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\run.py | Size: 0.00 MB | Modified: 2026-03-02 11:07:25 =====
+#!/usr/bin/env python
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
+from app import create_app
+
+if __name__ == '__main__':
+    app = create_app('development')
+    # Use WSGIRequestHandler with proper threading
+    from werkzeug.serving import make_server
+    server = make_server('0.0.0.0', 5000, app, threaded=True)
+    print(" * Running on http://localhost:5000 and http://127.0.0.1:5000")
+    print("Press CTRL+C to quit")
+    server.serve_forever()
+
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\setup_db.py | Size: 0.00 MB | Modified: 2026-03-02 08:39:55 =====
+"""
+Database setup script
+This script creates a fresh database or recreates tables if they have schema issues
+"""
+
+import os
+import sys
+from dotenv import load_dotenv
+import pymysql
+
+load_dotenv()
+
+# Database credentials
+MYSQL_HOST = os.getenv('MYSQL_HOST', '127.0.0.1')
+MYSQL_USER = os.getenv('MYSQL_USER', 'root')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'SQL@123PPa')
+MYSQL_DATABASE = os.getenv('MYSQL_DATABASE', 'interview_app_database')
+
+def setup_database():
+    """Create or reset the database"""
+    try:
+        # Connect to MySQL without database
+        conn = pymysql.connect(
+            host=MYSQL_HOST,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD
+        )
+        cursor = conn.cursor()
+        
+        # Drop existing database
+        print(f"Dropping existing database: {MYSQL_DATABASE}")
+        cursor.execute(f"DROP DATABASE IF EXISTS {MYSQL_DATABASE}")
+        
+        # Create new database
+        print(f"Creating new database: {MYSQL_DATABASE}")
+        cursor.execute(f"CREATE DATABASE {MYSQL_DATABASE}")
+        
+        # Close connection
+        cursor.close()
+        conn.close()
+        
+        print("âœ… Database setup completed successfully!")
+        print(f"Database '{MYSQL_DATABASE}' is ready.")
+        print("\nNow run: python app.py")
+        
+    except pymysql.Error as e:
+        print(f"âŒ MySQL Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"âŒ Error: {e}")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    print("=" * 50)
+    print("Interview App - Database Setup")
+    print("=" * 50)
+    setup_database()
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\SETUP_GUIDE.md | Size: 0.01 MB | Modified: 2026-03-02 06:05:39 =====
+# ðŸš€ Flask Backend - Complete Setup Guide
+
+## âœ… What's Included
+
+Your complete Flask backend codebase includes:
+
+### Core Files
+- **app.py** - Main Flask application with blueprint registration
+- **config.py** - Configuration management (Dev, Prod, Test)
+- **models.py** - SQLAlchemy models (User, Candidate, Question, Interview)
+- **auth.py** - JWT authentication and decorators
+- **utils.py** - Helper functions and utilities
+
+### Route Files (API Endpoints)
+- **routes_auth.py** - Authentication endpoints (register, login, logout)
+- **routes_candidates.py** - Candidate CRUD operations
+- **routes_questions.py** - Question CRUD operations
+- **routes_interviews.py** - Interview tracking operations
+
+### Configuration Files
+- **.env** - Environment variables with your database credentials
+- **requirements.txt** - Python dependencies
+- **API_DOCUMENTATION.md** - Detailed API documentation
+- **BACKEND_README.md** - Backend setup and usage guide
+
+---
+
+## ðŸ”§ Step-by-Step Setup
+
+### Step 1: Navigate to Backend Directory
+```powershell
+cd "c:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend"
+```
+
+### Step 2: Create Virtual Environment
+```powershell
+python -m venv venv
+```
+
+### Step 3: Activate Virtual Environment
+```powershell
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
+```
+
+If you get execution policy error, run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Step 4: Install Dependencies
+```powershell
+pip install -r requirements.txt
+```
+
+### Step 5: Verify MySQL is Running
+Make sure MySQL Server is installed and running on your system.
+
+### Step 6: Create Database (if not exists)
+```sql
+CREATE DATABASE interview_app_database;
+```
+
+### Step 7: Run the Backend
+```powershell
+python app.py
+```
+
+âœ… Backend will start at: **http://127.0.0.1:5000**
+
+---
+
+## ðŸ“‹ Database Credentials (Already in .env)
+
+```
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=SQL@123PPa
+MYSQL_DATABASE=interview_app_database
+SECRET_KEY=supersecretkey
+FLASK_ENV=development
+```
+
+---
+
+## ðŸ”Œ Testing the Backend
+
+### Health Check
+```powershell
+Invoke-WebRequest http://127.0.0.1:5000/api/health
+```
+
+### Register User
+```powershell
+$body = @{
+    username = "testuser"
+    email = "test@example.com"
+    password = "password123"
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://127.0.0.1:5000/api/auth/register" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+### Login
+```powershell
+$body = @{
+    username = "testuser"
+    password = "password123"
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://127.0.0.1:5000/api/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+---
+
+## ðŸ“š API Endpoints Summary
+
+### Authentication (`/api/auth`)
+- `POST /register` - Create new account
+- `POST /login` - Login and get JWT token
+- `GET /me` - Get current user (requires token)
+- `POST /logout` - Logout (requires token)
+
+### Candidates (`/api/candidates`)
+- `GET /` - Get all candidates
+- `GET /<id>` - Get specific candidate
+- `POST /` - Create candidate
+- `PUT /<id>` - Update candidate
+- `DELETE /<id>` - Delete candidate
+- `GET /search?q=<query>` - Search candidates
+
+### Questions (`/api/questions`)
+- `GET /` - Get all questions
+- `GET /<id>` - Get specific question
+- `POST /` - Create question
+- `PUT /<id>` - Update question
+- `DELETE /<id>` - Delete question
+
+### Interviews (`/api/interviews`)
+- `GET /` - Get all interviews
+- `GET /<id>` - Get specific interview
+- `GET /candidate/<candidate_id>` - Get candidate interviews
+- `POST /` - Create interview
+- `PUT /<id>` - Update interview
+- `DELETE /<id>` - Delete interview
+
+---
+
+## ðŸ” Authentication Flow
+
+1. **Register** with username, email, and password
+2. **Login** to get JWT token
+3. **Use token** in Authorization header for protected endpoints:
+   ```
+   Authorization: Bearer <your_token_here>
+   ```
+4. Token expires in **24 hours**
+
+---
+
+## ðŸŽ¯ Next Steps
+
+### 1. Verify Backend Works
+- Start the backend: `python app.py`
+- Check health: Visit `http://127.0.0.1:5000/api/health`
+- Create test data through API
+
+### 2. Connect Frontend (Next.js)
+- Frontend should use: `NEXT_PUBLIC_API_URL=http://127.0.0.1:5000`
+- API calls will be made to backend endpoints
+- JWT tokens will be stored in localStorage
+
+### 3. Test API Endpoints
+- Use Postman, Thunder Client, or cURL
+- See **API_DOCUMENTATION.md** for detailed examples
+
+### 4. Develop Frontend Components
+- Create pages for login/register
+- Display candidates, questions, and interview results
+- All data comes from backend APIs
+
+---
+
+## ðŸ“¦ Project Architecture
+
+```
+Interview App
+    â†“
+Frontend (Next.js) â†’ Backend (Flask) â†’ MySQL Database
+    â†“
+http://localhost:3000 â†’ http://127.0.0.1:5000 â†’ interview_app_database
+```
+
+**Data Flow:**
+1. User interacts with Next.js frontend
+2. Frontend sends API requests to Flask backend
+3. Flask backend queries MySQL database
+4. Response is returned as JSON to frontend
+5. Frontend renders UI dynamically
+
+---
+
+## ðŸ› ï¸ Common Commands
+
+### Start Backend
+```powershell
+python app.py
+```
+
+### Install New Package
+```powershell
+pip install package_name
+pip freeze > requirements.txt  # Update requirements
+```
+
+### Deactivate Virtual Environment
+```powershell
+deactivate
+```
+
+### Check Dependencies
+```powershell
+pip list
+```
+
+---
+
+## âš ï¸ Troubleshooting
+
+### Port 5000 Already in Use
+Edit `app.py` and change:
+```python
+app.run(debug=True, host='127.0.0.1', port=5001)
+```
+
+### MySQL Connection Error
+- Check MySQL is running
+- Verify credentials in `.env`
+- Ensure database exists: `interview_app_database`
+
+### CORS Error with Frontend
+- CORS is already configured for `http://localhost:3000`
+- If frontend uses different URL, update in `app.py`:
+```python
+allow_origins=["http://your-frontend-url:port"]
+```
+
+### Virtual Environment Issues
+```powershell
+# Deactivate and remove
+deactivate
+rm -r venv
+
+# Recreate
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+---
+
+## ðŸ“– Additional Resources
+
+- **API_DOCUMENTATION.md** - Complete API reference
+- **BACKEND_README.md** - Detailed backend documentation
+- **models.py** - Database schema
+- **config.py** - Configuration options
+
+---
+
+## âœ¨ Features Implemented
+
+âœ… User authentication with JWT  
+âœ… Password hashing with bcrypt  
+âœ… CORS enabled for frontend  
+âœ… MySQL database integration  
+âœ… CRUD operations for all resources  
+âœ… Search and filter capabilities  
+âœ… Error handling and validation  
+âœ… Environment-based configuration  
+âœ… API documentation  
+
+---
+
+## ðŸŽ‰ You're All Set!
+
+Your complete Flask backend is ready to use. Start the server and begin building your interview management application!
+
+For questions, refer to the documentation files or check the API endpoints with Postman.
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\test_minimal.py | Size: 0.00 MB | Modified: 2026-03-02 10:57:38 =====
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+if __name__ == '__main__':
+    print("Starting minimal Flask app on http://127.0.0.1:5001...")
+    app.run(host='127.0.0.1', port=5001, debug=False)
+
+
+===== FILE: C:\Users\2480328\OneDrive - Cognizant\Desktop\Project\Interview_App\backend\utils.py | Size: 0.00 MB | Modified: 2026-03-02 06:05:39 =====
+from datetime import datetime
+import json
+
+def success_response(data=None, message=None, status_code=200):
+    """Generate a success response"""
+    response = {}
+    if message:
+        response['message'] = message
+    if data:
+        response.update(data)
+    return response, status_code
+
+def error_response(message, status_code=400):
+    """Generate an error response"""
+    return {'message': message}, status_code
+
+def paginate(query, page=1, per_page=20):
+    """Paginate query results"""
+    paginated = query.paginate(page=page, per_page=per_page)
+    return {
+        'items': [item.to_dict() for item in paginated.items],
+        'total': paginated.total,
+        'pages': paginated.pages,
+        'current_page': page
+    }
+
+def format_datetime(dt):
+    """Format datetime to ISO format"""
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    return dt
+
+def validate_required_fields(data, required_fields):
+    """Validate that required fields are present in data"""
+    missing_fields = [field for field in required_fields if field not in data or not data[field]]
+    if missing_fields:
+        return False, f"Missing required fields: {', '.join(missing_fields)}"
+    return True, None
+
+
+===== RUN END: 2026-03-02 14:05:46 =====

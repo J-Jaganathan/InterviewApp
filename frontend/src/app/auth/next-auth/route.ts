@@ -1,3 +1,0 @@
-pages:{
-    signIn : "/auth/login";
-}
