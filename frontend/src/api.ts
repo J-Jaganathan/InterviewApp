@@ -181,9 +181,9 @@ export interface DashboardData {
 }
 
 export async function getDashboard(): Promise<DashboardData> {
-  const res = await fetch(`${API_BASE_URL}/api/dashboard`, {
+  const res = await fetch(`/api/dashboard`, {
     method: 'GET',
-    ...getFetchOptions(),
+    cache: 'no-store',
   });
   return handleResponse<DashboardData>(res);
 }
@@ -198,25 +198,59 @@ export interface Question {
   description?: string;
   category?: string;
   difficulty?: 'easy' | 'medium' | 'hard';
+  created_at?: string;
 }
 
-/** List (optional filter; only if backend supports it) */
+export interface QuestionsResponse {
+  items: Question[];
+  total: number;
+}
+
+export interface CategorySummary {
+  name: string;
+  count: number;
+}
+
+export interface CategoriesResponse {
+  items: CategorySummary[];
+}
+
+/** Get questions from the DB-driven API (with search & filtering) */
 export async function getQuestions(params?: {
+  q?: string;
   category?: string;
-  difficulty?: string;
+  page?: number;
   limit?: number;
-}): Promise<Question[]> {
-  const qs = new URLSearchParams();
-  if (params?.category) qs.append('category', params.category);
-  if (params?.difficulty) qs.append('difficulty', params.difficulty);
-  if (params?.limit) qs.append('limit', String(params.limit));
-  const url = `${API_BASE_URL}/api/questions${qs.toString() ? `?${qs}` : ''}`;
-  const res = await fetch(url, { method: 'GET', ...getFetchOptions() });
-  const data = await handleResponse<any>(res);
-  // Accept either direct array or {questions:[...]}
-  if (Array.isArray(data)) return data as Question[];
-  if (Array.isArray(data?.questions)) return data.questions as Question[];
-  return [];
+}): Promise<QuestionsResponse> {
+  const urlParams = new URLSearchParams();
+  if (params?.q) urlParams.set('q', params.q);
+  if (params?.category) urlParams.set('category', params.category);
+  if (params?.page) urlParams.set('page', String(params.page));
+  if (params?.limit) urlParams.set('limit', String(params.limit));
+
+  const query = urlParams.toString() ? `?${urlParams.toString()}` : '';
+  const res = await fetch(`/api/questions${query}`, {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    return { items: [], total: 0 };
+  }
+
+  return handleResponse(res);
+}
+
+/** Get all categories with counts from DB */
+export async function getCategories(): Promise<CategoriesResponse> {
+  const res = await fetch('/api/categories', {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    return { items: [] };
+  }
+
+  return handleResponse(res);
 }
 
 /** Guaranteed array for interview flow */
@@ -545,6 +579,59 @@ export async function updateInterview(id: number, data: Partial<Interview>) {
 export async function deleteInterview(id: number) {
   const res = await fetch(`${API_BASE_URL}/api/interviews/${id}`, getFetchOptions({ method: 'DELETE' }));
   return handleResponse(res);
+}
+
+/* =========================================================
+ * PRACTICE SESSIONS & QUESTION COMPLETION
+ * ======================================================= */
+
+export interface PracticeSession {
+  id: number;
+  user_id: number;
+  question_id: number;
+  status: 'in_progress' | 'solved' | 'skipped';
+  attempts: number;
+  solved_at?: string;
+  created_at: string;
+}
+
+export async function markQuestionComplete(questionId: number) {
+  const res = await fetch(
+    `/api/questions/${questionId}/complete`,
+    { method: 'POST', cache: 'no-store' }
+  );
+  return handleResponse<{ message: string; session: PracticeSession }>(res);
+}
+
+export async function unmarkQuestionComplete(questionId: number) {
+  const res = await fetch(
+    `/api/questions/${questionId}/complete`,
+    { method: 'DELETE', cache: 'no-store' }
+  );
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function getCompletedQuestions() {
+  const res = await fetch(
+    `/api/user/completed`,
+    { cache: 'no-store' }
+  );
+  return handleResponse<{ completed_questions: number[]; total: number }>(res);
+}
+
+export interface UserProgress {
+  total_questions: number;
+  completed_count: number;
+  progress_percentage: number;
+  sessions: PracticeSession[];
+}
+
+export async function getUserProgress() {
+  const res = await fetch(
+    `/api/user/progress`,
+    { cache: 'no-store' }
+  );
+  return handleResponse<UserProgress>(res);
 }
 
 /* =========================================================

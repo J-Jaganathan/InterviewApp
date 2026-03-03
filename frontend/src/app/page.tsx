@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { getDashboard, type DashboardData, logout } from "@/api";
+import { getDashboard, type DashboardData, logout, getUserProgress, type UserProgress } from "@/api";
 import { Home, CheckCircle, FileText, BookOpen, Mic } from "lucide-react";
+import QuickStart from "@/components/QuickStart";
+import { Power, BarChart3 } from "lucide-react";
 
 /* ---------------------- Inline SVG Icon Components ---------------------- */
 
@@ -84,7 +86,102 @@ function ProgressRing({ percentage }: { percentage: number }) {
     </div>
   );
 }
+function useOutsideClose<T extends HTMLElement>(isOpen: boolean, onClose: () => void) {
+  const ref = useState<React.RefObject<T>>(() => ({ current: null } as any))[0];
 
+  useEffect(() => {
+    if (!isOpen) return;
+    function handler(e: MouseEvent) {
+      const el = ref.current as unknown as HTMLElement | null;
+      if (el && !el.contains(e.target as Node)) onClose();
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [isOpen, onClose]);
+
+  return ref as React.RefObject<T>;
+}
+
+function UserMenu({
+  userName,
+  onProgress,
+  onLogout,
+}: {
+  userName?: string | null;
+  onProgress: () => void;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const initials =
+    (userName ? userName.split(" ").map((n) => n[0]).join("") : "U").slice(0, 2);
+  const ref = useOutsideClose<HTMLDivElement>(open, () => setOpen(false));
+
+  return (
+    <div className="relative" ref={ref}>
+      {/* Trigger */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-3 hover:bg-slate-50 rounded-xl px-3 py-2 transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow">
+          {initials}
+        </div>
+        <div className="hidden sm:block text-left">
+          <p className="text-sm font-semibold text-gray-800">{userName ?? ""}</p>
+          <p className="text-xs text-gray-400">Account</p>
+        </div>
+        <ChevronDownIcon />
+      </button>
+
+      {/* Menu */}
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50"
+        >
+          <div className="px-4 py-3 border-b border-slate-100">
+            <p className="text-sm font-semibold text-slate-900 line-clamp-1">{userName ?? "User"}</p>
+            <p className="text-xs text-slate-500">Quick actions</p>
+          </div>
+
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onProgress();
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 text-slate-800"
+          >
+            <BarChart3 size={18} className="text-indigo-600" />
+            <span>Progress</span>
+          </button>
+
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-red-50 text-slate-800"
+          >
+            <Power size={18} className="text-red-600" />
+            <span className="text-red-700">Logout</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 function SidebarItem({
   icon, active = false, label, isMenuOpen,
 }: { icon: React.ReactNode; active?: boolean; label: string; isMenuOpen: boolean }) {
@@ -100,17 +197,30 @@ function SidebarItem({
   );
 }
 
-function QuickStartItem({ icon, label }: { icon: React.ReactNode; label: string }) {
+function QuickStartItem({
+  icon, label, onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-blue-50 rounded-xl cursor-pointer hover:bg-blue-100 transition-all duration-200 group">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-between px-4 py-3 bg-blue-50 rounded-xl hover:bg-blue-100 transition-all duration-200 group w-full text-left"
+      aria-label={`Open ${label} questions`}
+    >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">{icon}</div>
+        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+          {icon}
+        </div>
         <span className="text-sm font-semibold text-gray-700">{label}</span>
       </div>
       <div className="text-blue-400 group-hover:text-blue-600 transition-colors">
         <ChevronRightIcon />
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -144,7 +254,23 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [userProgress, setUserProgress] = useState<UserProgress | null>(null);
+/** ── Notifications dropdown state & lifecycle ───────────────────────── */
+  const [showNotif, setShowNotif] = useState(false);
 
+  // Close notifications when pathname changes or when the sidebar toggles
+  useEffect(() => {
+    setShowNotif(false);
+  }, [pathname, isMenuOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowNotif(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   useEffect(() => {
     (async () => {
       try {
@@ -152,6 +278,16 @@ export default function Dashboard() {
         setError(null);
         const data = await getDashboard();
         setDashboardData(data);
+        
+        // Fetch user's practice progress
+        try {
+          const progress = await getUserProgress();
+          setUserProgress(progress);
+          console.log('User progress loaded:', progress);
+        } catch (progressErr) {
+          console.warn('Failed to load user progress:', progressErr);
+          // Don't fail dashboard if progress endpoint fails
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load dashboard");
         console.error(err);
@@ -162,9 +298,28 @@ export default function Dashboard() {
     })();
   }, []);
 
-  const progress = dashboardData?.progress;
-  const sessionsCompleted = dashboardData?.sessionsCompleted;
-  const totalSessions = dashboardData?.totalSessions;
+  const progress = useMemo(() => {
+    // Prefer userProgress data if available, otherwise fall back to dashboardData
+    if (userProgress && typeof userProgress.progress_percentage === 'number') {
+      return userProgress.progress_percentage;
+    }
+    return dashboardData?.progress ?? 0;
+  }, [userProgress, dashboardData?.progress]);
+
+  const sessionsCompleted = useMemo(() => {
+    if (userProgress && typeof userProgress.completed_count === 'number') {
+      return userProgress.completed_count;
+    }
+    return dashboardData?.sessionsCompleted ?? 0;
+  }, [userProgress, dashboardData?.sessionsCompleted]);
+
+  const totalSessions = useMemo(() => {
+    if (userProgress && typeof userProgress.total_questions === 'number') {
+      return userProgress.total_questions;
+    }
+    return dashboardData?.totalSessions ?? 0;
+  }, [userProgress, dashboardData?.totalSessions]);
+
   const notifications = dashboardData?.notifications;
   const user = dashboardData?.user;
   const upcomingInterview = dashboardData?.upcomingInterview;
@@ -186,6 +341,12 @@ export default function Dashboard() {
   }, [sessionsCompleted, totalSessions]);
 
   const goToInterview = () => router.push("/interview");
+  
+  const goToQuestions = (category?: string) => {
+    const q = category ? `?category=${encodeURIComponent(category)}` : "";
+    router.push(`/questions${q}`);
+  };
+
   const handleLogout = () => logout();
 
   const navItems = [
@@ -223,10 +384,6 @@ export default function Dashboard() {
 
         {/* User + Logout */}
         <div className="flex flex-col gap-2 mb-4 w-full px-3">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-300 border-2 border-white" />
-            {isMenuOpen && <span className="text-white text-sm font-medium">{user?.name?.split(" ")[0] ?? ""}</span>}
-          </div>
           <button onClick={handleLogout} className="text-xs bg-white/10 hover:bg-white/20 text-white rounded-lg py-2">
             Logout
           </button>
@@ -238,40 +395,101 @@ export default function Dashboard() {
         {/* Top Navbar */}
         <header className="bg-white border-b border-blue-50 px-8 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3 flex-1 max-w-md">
-            <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-xl px-4 py-2">
+            <form action="/questions" method="GET" className="flex-1 flex items-center gap-2 bg-slate-100 rounded-xl px-4 py-2">
               <SearchIcon />
               <input
                 type="text"
-                placeholder="Search..."
+                name="q"
+                placeholder="Search questions..."
                 className="bg-transparent outline-none text-sm text-gray-500 w-full placeholder-gray-400"
               />
-            </div>
+            </form>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Bell */}
-            <div className="relative cursor-pointer">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-gray-500 hover:bg-blue-50 transition-colors">
-                <BellIcon />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowNotif((v) => !v)}
+                  aria-haspopup="dialog"
+                  aria-expanded={showNotif}
+                  className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-gray-600 hover:bg-blue-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  <BellIcon />
+                  {typeof notifications === "number" && notifications > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-blue-600 rounded-full flex items-center justify-center">
+                      <span className="text-white text-[10px] font-bold leading-none">{notifications}</span>
+                    </span>
+                  )}
+                </button>
+
+                {showNotif && (
+                  <>
+                    {/* click-outside to close */}
+                    <button
+                      type="button"
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      className="fixed inset-0 cursor-default"
+                      onClick={() => setShowNotif(false)}
+                    />
+
+                    {/* Panel */}
+                    <div role="dialog" aria-label="Notifications" className="absolute right-0 mt-2 w-80 max-w-[88vw] z-50">
+                      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                          <p className="text-sm font-semibold text-slate-900">Notifications</p>
+                          <button
+                            type="button"
+                            onClick={() => setShowNotif(false)}
+                            className="text-slate-500 hover:text-slate-700"
+                            aria-label="Close notifications"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {/* Show a nice empty state when there are no notifications */}
+                        {!(typeof notifications === "number" && notifications > 0) ? (
+                          <div className="p-4">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                <BellIcon />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-slate-800">No new notifications</p>
+                                <p className="text-xs text-slate-500">
+                                  You’re all caught up. We’ll notify you about upcoming interviews and practice reminders.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // Minimal sample for when notifications > 0 (replace with your real list)
+                          <div className="max-h-72 overflow-auto divide-y divide-slate-100">
+                            <div className="p-4 hover:bg-slate-50">
+                              <p className="text-sm text-slate-800">
+                                You have {notifications} new notification{notifications > 1 ? "s" : ""}.
+                              </p>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Open the notifications panel to review details.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              {typeof notifications === "number" && notifications > 0 && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">{notifications}</span>
-                </div>
-              )}
-            </div>
 
             {/* User */}
-            <div className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 rounded-xl px-3 py-2 transition-colors">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-400 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow">
-                {(user?.name ? user.name.split(" ").map((n) => n[0]).join("") : "").substring(0, 2) || "U"}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{user?.name ?? ""}</p>
-                <p className="text-xs text-gray-400"></p>
-              </div>
-              <ChevronDownIcon />
-            </div>
+            <UserMenu
+              userName={user?.name ?? ""}
+              onProgress={() => router.push("/progress")}
+              onLogout={handleLogout}
+            />
           </div>
         </header>
 
@@ -303,13 +521,13 @@ export default function Dashboard() {
               </div>
 
               {/* Top band: Mock Interview Prep */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-50 mb-6">
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-50 mb-6 overflow-hidden">
+                <div className="flex flex-wrap items-start md:items-center gap-6 md:gap-8">
                   <div className="flex-shrink-0">
                     <InterviewIllustration />
                   </div>
 
-                  <div className="flex-1 flex items-center gap-8">
+                  <div className="min-w-0 flex-1 flex items-center gap-6 md:gap-8">
                     <div>
                       <p className="text-3xl font-extrabold text-gray-900">
                         {typeof sessionsCompleted === "number" ? sessionsCompleted : "—"}/
@@ -317,15 +535,19 @@ export default function Dashboard() {
                       </p>
                       <p className="text-sm text-gray-400 mt-1">Sessions completed</p>
                     </div>
+
                     <div className="w-px h-12 bg-gray-100" />
+
                     <div>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Average Score</p>
                       <p className="text-3xl font-extrabold text-blue-600">
                         {Number.isFinite(avgScoreDisplay) ? `${avgScoreDisplay}%` : "—"}
                       </p>
                     </div>
+
                     <div className="w-px h-12 bg-gray-100" />
-                    <div className="flex-1">
+
+                    <div className="min-w-0 flex-1">
                       <div className="flex justify-between text-xs text-gray-400 mb-2">
                         <span>Progress to goal</span>
                         <span>
@@ -339,7 +561,7 @@ export default function Dashboard() {
                           style={{ width: `${pctToGoal}%` }}
                         />
                       </div>
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2 overflow-x-auto md:overflow-visible max-w-full">
                         {["HR", "Technical", "Behavioral", "System Design"].map((tag) => (
                           <span
                             key={tag}
@@ -354,7 +576,15 @@ export default function Dashboard() {
 
                   <button
                     onClick={() => router.push("/interview")}
-                    className="flex-shrink-0 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-6 py-3 transition-colors shadow-md shadow-blue-200"
+                    className="
+                      order-3 md:order-none
+                      w-full md:w-auto
+                      md:ml-auto
+                      flex-shrink-0
+                      flex items-center justify-center gap-2
+                      bg-blue-600 hover:bg-blue-700 text-white font-semibold
+                      rounded px-6 py-3 transition-colors shadow-md shadow-blue-200
+                    "
                   >
                     Continue
                     <ChevronDownIcon />
@@ -401,24 +631,7 @@ export default function Dashboard() {
                     isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                   }`}
                 >
-                  <h3 className="font-bold text-gray-800 text-lg mb-2">Quick Start</h3>
-                  <div className="flex justify-center my-3 opacity-80">
-                    <svg width="100" height="70" viewBox="0 0 100 70" fill="none">
-                      <rect x="20" y="30" width="60" height="35" rx="4" fill="#dbeafe" />
-                      <rect x="50" y="38" width="22" height="3" rx="1.5" fill="#bfdbfe" />
-                      <rect x="50" y="44" width="16" height="3" rx="1.5" fill="#bfdbfe" />
-                      <rect x="50" y="50" width="20" height="3" rx="1.5" fill="#bfdbfe" />
-                      <circle cx="35" cy="46" r="10" fill="#1a3bcc" />
-                      <circle cx="35" cy="42" r="4" fill="#bfdbfe" />
-                      <rect x="28" y="47" width="14" height="8" rx="8" fill="#bfdbfe" />
-                    </svg>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-4 text-center">Jump into a practice session</p>
-                  <div className="flex flex-col gap-2">
-                    <QuickStartItem icon={<LightbulbIcon />} label="Aptitude" />
-                    <QuickStartItem icon={<DatabaseIcon />} label="DSA" />
-                    <QuickStartItem icon={<NetworkIcon />} label="System Design" />
-                  </div>
+                  <QuickStart />
                 </div>
 
                 {/* Upcoming Interview (right column if present) */}

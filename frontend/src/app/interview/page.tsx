@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 function InterviewStartContent() {
   const search = useSearchParams();
   const router = useRouter();
-
+  const now = new Date().toLocaleString();
   const via = search.get('via') ?? undefined;
   const role = search.get('role') ?? undefined;
   const company = search.get('company') ?? undefined;
@@ -29,7 +29,7 @@ function InterviewStartContent() {
           <p className="text-gray-600">
             {via === 'resume' 
               ? 'Starting interview based on your uploaded resume'
-              : `Starting interview for ${role || '—'} at ${company || '—'}`
+              : `Starting interview for ${role || 'Interview Session'} at ${company || now}`
             }
           </p>
         </div>
