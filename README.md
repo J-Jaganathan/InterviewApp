@@ -1,358 +1,210 @@
-# Interview App – Full Stack Application
+# Interview Management Platform
 
-A full-stack Interview Management Application built with:
+<p align="center">
 
-* **Frontend:** Next.js (React)
-* **Backend:** Python (Flask)
-* **Database:** MySQL
-* **Architecture:** REST API based dynamic rendering (No hardcoded frontend data)
+<img src="https://img.shields.io/badge/Frontend-Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white"/>
 
----
+<img src="https://img.shields.io/badge/Backend-Flask-3BABC3?style=for-the-badge&logo=flask&logoColor=white"/>
 
-# 🚀 Project Overview
+<img src="https://img.shields.io/badge/Database-MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white"/>
 
-This application allows:
+<img src="https://img.shields.io/badge/Authentication-JWT-FF6B35?style=for-the-badge"/>
 
-* User authentication (Login/Register)
-* Managing interview questions
-* Managing candidates
-* Tracking interview results
-* Rendering all frontend pages dynamically from database
-* Secure backend API integration
+<img src="https://img.shields.io/badge/ORM-SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white"/>
 
-All frontend data is fetched from backend APIs instead of static mock files.
+</p>
+
+## Overview
+
+A full-stack Interview Management Platform designed to streamline candidate evaluation workflows through a centralized web application.
+
+The system provides secure authentication, candidate management, interview question administration, and interview result tracking through a REST API-driven architecture where all frontend content is dynamically rendered from backend services.
 
 ---
 
-# 🏗️ Project Architecture
+## Architecture
 
-```
-Frontend (Next.js)
-        ↓
-REST API (Flask)
-        ↓
-MySQL Database
+```text
+┌─────────────────────┐
+│      Next.js        │
+│      Frontend       │
+└──────────┬──────────┘
+           │ REST APIs
+           ▼
+┌─────────────────────┐
+│       Flask         │
+│      Backend        │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│       MySQL         │
+│      Database       │
+└─────────────────────┘
 ```
 
 ---
 
-# 🗂️ Folder Structure
+## Core Features
 
-## Backend
+### Authentication & Security
 
-```
-backend/
+* User Registration
+* Secure Login
+* JWT Authentication
+* Protected Routes
+* Password Hashing
+
+### Candidate Management
+
+* Candidate Profile Creation
+* Candidate Tracking
+* Candidate Status Management
+
+### Interview Administration
+
+* Interview Question Repository
+* Difficulty Classification
+* Interview Scheduling Support
+
+### Evaluation Workflow
+
+* Interview Result Tracking
+* Score Management
+* Feedback Recording
+
+### Dynamic Frontend Rendering
+
+* No hardcoded datasets
+* Backend-driven UI rendering
+* REST API integration across all pages
+
+---
+
+## Technology Stack
+
+| Layer             | Technology    |
+| ----------------- | ------------- |
+| Frontend          | Next.js       |
+| Backend           | Flask         |
+| Database          | MySQL         |
+| ORM               | SQLAlchemy    |
+| Authentication    | JWT           |
+| API Communication | REST APIs     |
+| Client Requests   | Axios / Fetch |
+
+---
+
+## Repository Structure
+
+```text
+InterviewApp/
 │
-├── main.py
-├── database.py
-├── models.py
-├── schemas.py
-├── crud.py
-├── requirements.txt
-└── .env
-```
-
-## Frontend
-
-```
-src/
-├── app/
-├── components/
-├── services/api.ts
-└── pages/
-```
-
----
-
-# 🛠️ Tech Stack
-
-* Frontend: Next.js 14
-* Backend: Flask
-* ORM: SQLAlchemy
-* Database: MySQL
-* Auth: JWT
-* API Client: Axios / Fetch
-
----
-
-# 🧠 Database Configuration
-
-The backend uses the following database configuration:
-
-```python
-DB_CONFIG = {
-    "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
-    "port": int(os.getenv("MYSQL_PORT", "3306")),
-    "user": os.getenv("MYSQL_USER", "root"),
-    "password": os.getenv("MYSQL_PASSWORD", "SQL@123PPa"),
-    "database": os.getenv("MYSQL_DATABASE", "interview_app_database"),
-    "autocommit": False,
-}
+├── backend/
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── crud.py
+│   └── requirements.txt
+│
+├── src/
+│   ├── app/
+│   ├── pages/
+│   ├── components/
+│   └── services/
+│
+└── README.md
 ```
 
 ---
 
-# 🗄️ Database Setup
+## Authentication Flow
 
-## 1️⃣ Install MySQL
-
-Download and install MySQL from:
-
-* [https://dev.mysql.com/downloads/](https://dev.mysql.com/downloads/)
-
-## 2️⃣ Create Database
-
-```sql
-CREATE DATABASE interview_app_database;
-```
-
-## 3️⃣ Create Tables
-
-```sql
-CREATE TABLE users (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    username VARCHAR(100) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'user',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE candidates (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    status VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE questions (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    title VARCHAR(255),
-    description TEXT,
-    difficulty VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE interviews (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    candidate_id INT,
-    question_id INT,
-    score INT,
-    feedback TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (candidate_id) REFERENCES candidates(id),
-    FOREIGN KEY (question_id) REFERENCES questions(id)
-);
+```text
+User Login
+     │
+     ▼
+Flask Authentication Service
+     │
+     ▼
+Password Verification
+     │
+     ▼
+JWT Token Generation
+     │
+     ▼
+Frontend Stores Token
+     │
+     ▼
+Protected API Access
 ```
 
 ---
 
-# 🔧 Backend Setup (FastAPI)
+## Development Setup
 
-## 1️⃣ Create Virtual Environment
+### Backend
 
 ```bash
 python -m venv venv
-```
-
-Activate:
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-Mac/Linux:
-
-```bash
-source venv/bin/activate
-```
-
----
-
-## 2️⃣ Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-Example `requirements.txt`:
-
-```
-flask
-uvicorn
-sqlalchemy
-pymysql
-python-dotenv
-passlib[bcrypt]
-python-jose
-```
-
-Checkout [backend/SETUP_GUIDE.md](https://github.com/J-Jaganathan/InterviewApp/blob/main/backend/SETUP_GUIDE.md) for more clarification.
-
----
-
-## 3️⃣ Create .env File
-
-```
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=<your-password>
-MYSQL_DATABASE=interview_app_database
-SECRET_KEY=supersecretkey
-```
-
----
-
-## 4️⃣ Run Backend Server
+Run:
 
 ```bash
-uvicorn main:app --reload
+python main.py
 ```
 
-Backend runs at:
-
-```
-http://127.0.0.1:8000
-```
-
-Swagger Docs:
-
-```
-http://127.0.0.1:8000/docs
-```
-
----
-
-# 🎨 Frontend Setup (Next.js)
-
-## 1️⃣ Install Dependencies
+### Frontend
 
 ```bash
 npm install
-```
-
-## 2️⃣ Setup Environment
-
-Create `.env.local`
-
-```
-NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
-```
-
-## 3️⃣ Run Frontend
-
-```bash
 npm run dev
 ```
 
-Runs at:
-
-```
-http://localhost:3000
-```
-
 ---
 
-# 🔄 API Integration Pattern
+## API Testing
 
-All frontend pages use dynamic fetching:
-
-Example:
-
-```ts
-const response = await fetch(
-  `${process.env.NEXT_PUBLIC_API_URL}/candidates`
-);
-const data = await response.json();
-```
-
-No static mock data is used.
-
----
-
-# 🔐 Authentication Flow
-
-1. User registers
-2. Password hashed using bcrypt
-3. JWT token generated on login
-4. Token stored in localStorage
-5. Protected routes verify token via middleware
-
----
-
-# 🧪 Testing APIs
-
-Use:
+The APIs can be tested using:
 
 * Postman
-* Thunder Client (VS Code)
+* Thunder Client
+* Browser Developer Tools
 
 ---
 
-# ⚠️ Common Issues
+## Engineering Highlights
 
-## Database Connection Error
-
-Check:
-
-* MySQL running
-* Credentials correct
-* Database exists
+* Backend-led architecture with dynamic API-driven rendering
+* JWT-based authentication and authorization
+* SQLAlchemy-based database abstraction
+* Modular separation of frontend and backend concerns
+* Relational database design for candidate and interview workflows
 
 ---
 
-# 📈 Future Improvements
+## Future Enhancements
 
-* Role-based access control
-* Interview analytics dashboard
+* Role-Based Access Control (RBAC)
+* Interview Analytics Dashboard
+* Search and Filtering
 * Pagination
-* Search filters
-* Docker deployment
-* CI/CD pipeline
-* Unit & integration testing
-* Production environment config
+* Docker Deployment
+* CI/CD Integration
+* Automated Testing
+* Monitoring and Logging
 
 ---
 
-# 🐳 Docker (Optional Deployment)
+## License
 
-Create Dockerfile for backend and frontend.
-
-Use docker-compose to manage:
-
-* MySQL
-* Backend
-* Frontend
+This project was developed for learning, portfolio, and engineering demonstration purposes.
 
 ---
 
-# 📌 Production Checklist
-
-* Use strong SECRET_KEY
-* Use environment variables securely
-* Enable HTTPS
-* Use proper CORS origins
-* Turn off debug mode
-* Enable database pooling
-* Add logging & monitoring
-
----
-
-# 🧩 How Everything Works Together
-
-1. Frontend calls REST API.
-2. Backend validates request.
-3. Backend interacts with MySQL.
-4. JSON response returned.
-5. Frontend renders UI dynamically.
-
----
-
-# 👨‍💻 Author
+# Author
 
 Built as a full-stack dynamic Interview Management System.
