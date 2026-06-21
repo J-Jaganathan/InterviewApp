@@ -3,7 +3,7 @@
 A full-stack Interview Management Application built with:
 
 * **Frontend:** Next.js (React)
-* **Backend:** Python (FastAPI)
+* **Backend:** Python (Flask)
 * **Database:** MySQL
 * **Architecture:** REST API based dynamic rendering (No hardcoded frontend data)
 
@@ -29,7 +29,7 @@ All frontend data is fetched from backend APIs instead of static mock files.
 ```
 Frontend (Next.js)
         ↓
-REST API (FastAPI)
+REST API (Flask)
         ↓
 MySQL Database
 ```
@@ -67,7 +67,7 @@ src/
 # 🛠️ Tech Stack
 
 * Frontend: Next.js 14
-* Backend: FastAPI
+* Backend: Flask
 * ORM: SQLAlchemy
 * Database: MySQL
 * Auth: JWT
@@ -182,7 +182,7 @@ pip install -r requirements.txt
 Example `requirements.txt`:
 
 ```
-fastapi
+flask
 uvicorn
 sqlalchemy
 pymysql
@@ -190,6 +190,8 @@ python-dotenv
 passlib[bcrypt]
 python-jose
 ```
+
+Checkout [backend/SETUP_GUIDE.md](https://github.com/J-Jaganathan/InterviewApp/blob/main/backend/SETUP_GUIDE.md) for more clarification.
 
 ---
 
@@ -199,7 +201,7 @@ python-jose
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_USER=root
-MYSQL_PASSWORD=SQL@123PPa
+MYSQL_PASSWORD=<your-password>
 MYSQL_DATABASE=interview_app_database
 SECRET_KEY=supersecretkey
 ```
@@ -287,7 +289,6 @@ No static mock data is used.
 
 Use:
 
-* Swagger UI (`/docs`)
 * Postman
 * Thunder Client (VS Code)
 
@@ -302,26 +303,6 @@ Check:
 * MySQL running
 * Credentials correct
 * Database exists
-
-## CORS Error
-
-Ensure FastAPI has:
-
-```python
-from fastapi.middleware.cors import CORSMiddleware
-```
-
-And:
-
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
 
 ---
 
