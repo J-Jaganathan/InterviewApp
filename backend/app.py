@@ -12,18 +12,18 @@ from routes_progress import progress_bp
 from routes_study_plan import study_bp
 import os
 
-def create_app(config_name='development'):
+def create_app(config_name):
     """Application factory"""
     app = Flask(__name__)
     
     # Load configuration
-    app.config.from_object(config_by_name.get(config_name, 'development'))
+    app.config.from_object(config_by_name.get(config_name))
     
     # Initialize extensions
     db.init_app(app)
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+            "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "https://interview-app-mu-nine.vercel.app"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"]
         }
@@ -60,7 +60,12 @@ def create_app(config_name='development'):
     
     return app
 
+app = create_app(os.getenv('FLASK_ENV'))
+
 if __name__ == '__main__':
-    config_name = os.getenv('FLASK_ENV', 'development')
-    app = create_app(config_name)
-    app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False)
+    app.run(
+        debug=False,
+        host='127.0.0.1',
+        port=5000,
+        use_reloader=False
+    )
