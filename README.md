@@ -186,16 +186,73 @@ The APIs can be tested using:
 
 ---
 
-## Future Enhancements
+## Future Roadmap
 
-* Role-Based Access Control (RBAC)
-* Interview Analytics Dashboard
-* Search and Filtering
-* Pagination
-* Docker Deployment
-* CI/CD Integration
-* Automated Testing
-* Monitoring and Logging
+### AI-Powered Mock Interview Engine
+
+Planned enhancement to transform the platform from a question repository into a fully interactive interview simulation system.
+
+#### Features Planned
+
+##### Automated Interview Sessions
+
+* Dynamic question generation and sequencing
+* Multi-round interview workflows
+* Adaptive questioning based on candidate performance
+* Domain-specific interview tracks
+
+##### AI Answer Evaluation
+
+* Natural Language Processing based answer assessment
+* Semantic similarity scoring against expected answers
+* Technical concept coverage analysis
+* Feedback generation with improvement suggestions
+
+##### Voice Interview Analysis
+
+* Speech-to-text transcription
+* Communication clarity assessment
+* Confidence and fluency analysis
+* Filler-word and hesitation detection
+
+##### Video Interview Analysis
+
+* Facial expression analysis
+* Eye-contact monitoring
+* Engagement measurement
+* Non-verbal communication assessment
+
+##### RAG-Based Interview Intelligence
+
+* Retrieval-Augmented Generation for contextual questioning
+* Company-specific interview preparation
+* Personalized learning recommendations
+* Knowledge-gap identification
+
+##### Interview Session Management
+
+* Complete interview history tracking
+* Session replay and review
+* Performance analytics across interviews
+* Candidate progress visualization
+
+### Planned Technology Additions
+
+* OpenAI / LLM Integration
+* Retrieval-Augmented Generation (RAG)
+* Vector Databases
+* Speech Recognition Models
+* Computer Vision Models
+* Real-Time Interview Analytics
+* WebRTC-based Live Interviewing
+
+### Research Areas
+
+* Multimodal AI Evaluation
+* Behavioral Analysis Models
+* Technical Answer Scoring Systems
+* Real-Time Interview Feedback Systems
+* Personalized Interview Coaching
 
 ---
 

@@ -16,7 +16,7 @@ def get_completed_questions(user):
     """Get all questions completed by the current user"""
     sessions = PracticeSession.query.filter_by(
         user_id=user.id,
-        status='solved'
+        status='completed'
     ).all()
     
     completed_questions = [session.question_id for session in sessions]
@@ -34,7 +34,7 @@ def get_user_progress(user):
     sessions = PracticeSession.query.filter_by(user_id=user.id).all()
     
     total_questions = Question.query.count()
-    completed_count = len([s for s in sessions if s.status == 'solved'])
+    completed_count = len([s for s in sessions if s.status == 'completed'])
     
     progress_percentage = (completed_count / total_questions * 100) if total_questions > 0 else 0
     
@@ -198,14 +198,14 @@ def mark_question_complete(user, question_id):
         session = PracticeSession(
             user_id=user.id,
             question_id=question_id,
-            status='solved',
+            status='completed',
             solved_at=datetime.utcnow(),
             attempts=1
         )
         db.session.add(session)
     else:
         # Update existing session
-        session.status = 'solved'
+        session.status = 'completed'
         session.solved_at = datetime.utcnow()
         session.attempts = (session.attempts or 0) + 1
     

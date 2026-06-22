@@ -21,7 +21,7 @@ def get_dashboard(user):
         total = prog.total_problems or total_questions
     else:
         solved = db.session.query(PracticeSession)\
-            .filter_by(user_id=user.id, status='solved').count()
+            .filter_by(user_id=user.id, status='completed').count()
         total = total_questions
 
     progress_pct = round((solved / total * 100), 1) if total else 0

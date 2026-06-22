@@ -48,9 +48,9 @@ function iconFor(categoryName: string): string {
 export default function QuickStart() {
   // Use the original quick start items for now
   const quickStartItems = [
-    { name: 'Arrays', count: 250, href: '/questions?category=Arrays' },
-    { name: 'Strings', count: 180, href: '/questions?category=Strings' },
-    { name: 'Graphs', count: 120, href: '/questions?category=Graphs' },
+    { name: 'Arrays', count: 25, href: '/questions?category=Arrays' },
+    { name: 'Strings', count: 18, href: '/questions?category=Strings' },
+    { name: 'Graphs', count: 12, href: '/questions?category=Graphs' },
   ];
 
   return (

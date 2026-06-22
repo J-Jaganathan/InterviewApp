@@ -11,11 +11,11 @@ class Config:
     
     # MySQL Database Configuration
     # URL-encode password to handle special characters like @
-    mysql_user = os.getenv('MYSQL_USER', 'root')
-    mysql_password = quote(os.getenv('MYSQL_PASSWORD', 'SQL@123PPa'), safe='')
-    mysql_host = os.getenv('MYSQL_HOST', '127.0.0.1')
-    mysql_port = os.getenv('MYSQL_PORT', '3306')
-    mysql_db = os.getenv('MYSQL_DATABASE', 'interview_app_database')
+    mysql_user = os.getenv('MYSQL_USER')
+    mysql_password = quote(os.getenv('MYSQL_PASSWORD'), safe='')
+    mysql_host = os.getenv('MYSQL_HOST')
+    mysql_port = os.getenv('MYSQL_PORT')
+    mysql_db = os.getenv('MYSQL_DATABASE')
     
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+pymysql://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_db}"

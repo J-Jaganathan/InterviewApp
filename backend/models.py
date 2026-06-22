@@ -124,12 +124,43 @@ class PracticeSession(db.Model):
     __tablename__ = 'practice_sessions'
 
     id = db.Column(db.BigInteger, primary_key=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey('users.id'), nullable=False, index=True)
-    question_id = db.Column(db.BigInteger, db.ForeignKey('questions.id'), nullable=False, index=True)
-    status = db.Column(db.Enum('in_progress', 'solved', 'skipped', name='session_status_enum'))
-    attempts = db.Column(db.Integer, default=0)
+
+    user_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('users.id'),
+        nullable=False,
+        index=True
+    )
+
+    question_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('questions.id'),
+        nullable=False,
+        index=True
+    )
+
+    status = db.Column(
+        db.Enum(
+            'pending',
+            'in_progress',
+            'completed',
+            'skipped',
+            name='session_status_enum'
+        ),
+        nullable=False,
+        default='pending'
+    )
+
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+
+    score = db.Column(db.Float)
+
     solved_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
 
     def to_dict(self):
         return {
@@ -138,10 +169,10 @@ class PracticeSession(db.Model):
             'question_id': self.question_id,
             'status': self.status,
             'attempts': self.attempts,
+            'score': self.score,
             'solved_at': self.solved_at.isoformat() if self.solved_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
-
 
 # -----------------------------
 # Resources  (resource_type is VARCHAR per ERD)

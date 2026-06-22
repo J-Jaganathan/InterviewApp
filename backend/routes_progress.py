@@ -13,7 +13,7 @@ def get_progress(user):
     prog = db.session.query(Progress).filter_by(user_id=user.id).first()
 
     solved = prog.solved_problems if prog else db.session.query(PracticeSession)\
-                .filter_by(user_id=user.id, status='solved').count()
+                .filter_by(user_id=user.id, status='completed').count()
     total = prog.total_problems if (prog and prog.total_problems) else total_questions
     overall = round((solved / total * 100), 1) if total else 0
 
